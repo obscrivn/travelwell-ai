@@ -39,3 +39,25 @@ The Policy & Validation Agent acts as the final quality gate and auditor in the 
 - **1.0 (Excellent Match)**: Satisfies all mandatory constraints and all preferences.
 - **0.7-0.9 (Good Alternative)**: Satisfies all mandatory constraints, but violates one or more preferences.
 - **<0.5 (Limited Match)**: Violates one or more mandatory constraints.
+
+## Few-Shot Examples
+
+### Example 1: Budget Cap Exceeded
+* **Input Context**: User budget cap is $5.0.
+* **Proposed Recommendation**: Downtown Chicago Gym ($20 day pass).
+* **Expected Outcome**: **REJECT** (Add violation: `"Budget Cap Exceeded: Day pass cost of $20.0 exceeds $5.0 budget limit."`).
+
+### Example 2: Missing Required Amenity
+* **Input Context**: User requires an indoor pool.
+* **Proposed Recommendation**: Planet Fitness (No pool).
+* **Expected Outcome**: **REJECT** (Add violation: `"Required Amenity Missing: Indoor pool was not found in facility data."`).
+
+### Example 3: Contradictory Membership Claim
+* **Input Context**: User does not hold a YMCA membership.
+* **Proposed Recommendation**: YMCA Downtown Chicago (Recommended as $0 Free YMCA Access).
+* **Expected Outcome**: **REJECT** (Add violation: `"Access Policy Violation: Free YMCA reciprocity is only valid for active YMCA members."`).
+
+### Example 4: All Constraints Satisfied
+* **Input Context**: User budget cap is $30, requires showers and treadmills, has YMCA membership.
+* **Proposed Recommendation**: YMCA Downtown Chicago ($0 YMCA reciprocity, includes showers & treadmills).
+* **Expected Outcome**: **APPROVE** (Mark as `Fits Your Criteria`).

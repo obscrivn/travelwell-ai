@@ -108,6 +108,27 @@ Instructions:
 - **Satisfied Constraints:** [List of satisfied constraints]
 - **Violated Constraints:** [List of violated constraints, or "None"]
 - **Recommendation Rationale:** [Rationale]
+
+### Few-Shot Validation Examples:
+
+Example 1:
+- Budget: $5
+- Recommendation: $20 day pass
+- Expected Outcome: Demote or Reject. Violated Constraints: "Budget Cap Exceeded: Day pass cost of $20.0 exceeds $5.0 budget limit."
+
+Example 2:
+- Required: Indoor pool
+- Facility: No pool
+- Expected Outcome: Demote or Reject. Violated Constraints: "Required Amenity Missing: Indoor pool was not found in facility data."
+
+Example 3:
+- YMCA membership: No
+- Recommendation: Free YMCA access
+- Expected Outcome: Demote or Reject. Violated Constraints: "Access Policy Violation: Free YMCA reciprocity is only valid for active YMCA members."
+
+Example 4:
+- Everything satisfies constraints
+- Expected Outcome: Approve. Eligibility Status: "Fits Your Criteria"
 """,
     output_key="validation_findings"
 )
