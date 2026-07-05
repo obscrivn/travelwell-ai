@@ -339,6 +339,20 @@ export default function App() {
     }
   ];
 
+  const buildRecommendationSummary = (recs: Recommendation[], noSatisfies: boolean) => {
+    if (recs.length === 0) return "";
+    if (noSatisfies) {
+      return "I could not find a perfect match, but I found the closest alternatives based on your preferences.";
+    }
+    const topMatch = recs[0];
+    const costText = topMatch.facility.pricing.cost === 0 
+      ? "is free" 
+      : `costs $${topMatch.facility.pricing.cost}`;
+    const walkTime = topMatch.facility.distance.walking_time_minutes;
+
+    return `I found ${recs.length} spaces matching your selections. ${topMatch.facility.name} is your top match because it ${costText}, is only a ${walkTime}-minute walk away, and satisfies your requirements.`;
+  };
+
   const handleSearchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSearching(true);
@@ -793,9 +807,9 @@ export default function App() {
       </div>
 
       {/* AI Concierge Summary Banner */}
-      {showResults && recommendations[0] && (
+      {showResults && recommendations.length > 0 && (
         <div className="concierge-summary-card">
-          <strong>💡 AI Recommendation Details:</strong> I found {recommendations.length} spaces matching your selections. <strong>{recommendations[0].facility.name}</strong> is currently your top match because it {recommendations[0].facility.pricing.cost === 0 ? "is free" : `costs $${recommendations[0].facility.pricing.cost}`}, is only a {recommendations[0].facility.distance.walking_time_minutes}-minute walk away, and satisfies your requirements.
+          <strong>💡 AI Recommendation Details:</strong> {buildRecommendationSummary(recommendations, noOptionSatisfiesConstraints)}
         </div>
       )}
 
