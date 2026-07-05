@@ -793,14 +793,9 @@ export default function App() {
       </div>
 
       {/* AI Concierge Summary Banner */}
-      {showResults && selectedRec && (
+      {showResults && recommendations[0] && (
         <div className="concierge-summary-card">
-          <strong>💡 AI Recommendation Details:</strong> I found {recommendations.length} spaces matching your selections.
-          {selectedRec.rank === 1 ? (
-            <span> <strong>{selectedRec.facility.name}</strong> is currently your top match because it {selectedRec.facility.pricing.cost === 0 ? "provides free access" : `costs $${selectedRec.facility.pricing.cost}`}, is only a {selectedRec.facility.distance.walking_time_minutes}-minute walk away, and satisfies your requirements.</span>
-          ) : (
-            <span> You selected <strong>{selectedRec.facility.name}</strong> (Choice #{selectedRec.rank}) which is located {selectedRec.facility.distance.walking_time_minutes} minutes walk away and has a guest pass cost of ${selectedRec.facility.pricing.cost}.</span>
-          )}
+          <strong>💡 AI Recommendation Details:</strong> I found {recommendations.length} spaces matching your selections. <strong>{recommendations[0].facility.name}</strong> is currently your top match because it {recommendations[0].facility.pricing.cost === 0 ? "is free" : `costs $${recommendations[0].facility.pricing.cost}`}, is only a {recommendations[0].facility.distance.walking_time_minutes}-minute walk away, and satisfies your requirements.
         </div>
       )}
 
