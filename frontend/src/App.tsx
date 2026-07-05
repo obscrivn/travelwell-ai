@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { runConciergeStream, parseMarkdownToRecommendations } from './api/client';
 import './App.css';
 import { 
   Sparkles, 
@@ -13,7 +14,7 @@ import {
   Compass
 } from 'lucide-react';
 
-interface Facility {
+export interface Facility {
   id: string;
   name: string;
   address: string;
@@ -47,7 +48,7 @@ interface Facility {
   };
 }
 
-interface Recommendation {
+export interface Recommendation {
   facility: Facility;
   rank: number;
   match_quality: 'Excellent Match' | 'Good Alternative' | 'Limited Match';
@@ -286,10 +287,11 @@ export default function App() {
   // Search execution status
   const [isSearching, setIsSearching] = useState(false);
   const [currentStageIndex, setCurrentStageIndex] = useState(-1);
-  const [showResults, setShowResults] = useState(true);
+  const [showResults, setShowResults] = useState(false);
   const [noOptionSatisfiesConstraints, setNoOptionSatisfiesConstraints] = useState(false);
-  const [recommendations, setRecommendations] = useState<Recommendation[]>(USER_FACILITIES_ELIGIBLE);
-  const [selectedRecId, setSelectedRecId] = useState<string>("ymca_chicago");
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [selectedRecId, setSelectedRecId] = useState<string>("");
+  const [isDemoMode, setIsDemoMode] = useState(false);
 
   // Premium Vertical Timeline Stages
   const timelineStages = [
@@ -343,20 +345,65 @@ export default function App() {
     setCurrentStageIndex(0);
     setShowResults(false);
     setNoOptionSatisfiesConstraints(false);
+    setIsDemoMode(false);
 
-    for (let i = 0; i < timelineStages.length; i++) {
-      setCurrentStageIndex(i);
-      await new Promise(resolve => setTimeout(resolve, 200));
-    }
+    const animateStages = async () => {
+      for (let i = 0; i < timelineStages.length; i++) {
+        setCurrentStageIndex(i);
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+    };
 
-    if (budgetSelection === "free" || budgetSelection === "10") {
-      setNoOptionSatisfiesConstraints(true);
-      setRecommendations(USER_FACILITIES_IMPOSSIBLE);
-      setSelectedRecId(USER_FACILITIES_IMPOSSIBLE[0].facility.id);
-    } else {
-      setRecommendations(USER_FACILITIES_ELIGIBLE);
-      setSelectedRecId(USER_FACILITIES_ELIGIBLE[0].facility.id);
-    }
+    const runBackendStream = async () => {
+      try {
+        const fullMarkdownText = await runConciergeStream({
+          location,
+          timeWindow,
+          budgetSelection,
+          hasYmca,
+          showersReq,
+          parkingReq,
+          poolPref,
+          treadmillPref
+        }, (event) => {
+          if (event.author === 'research_intelligence') {
+            setCurrentStageIndex(prev => Math.min(Math.max(prev, 1), 3));
+          } else if (event.author === 'ranking_itinerary') {
+            setCurrentStageIndex(prev => Math.min(Math.max(prev, 4), 5));
+          } else if (event.author === 'policy_validation') {
+            setCurrentStageIndex(6);
+          }
+        }, () => {});
+
+        const parsed = parseMarkdownToRecommendations(fullMarkdownText);
+        if (parsed && parsed.length > 0) {
+          setRecommendations(parsed);
+          setSelectedRecId(parsed[0].facility.id);
+          const hasImpossible = parsed.some(r => r.eligibility_status === 'Rejected' || r.eligibility_status === 'Alternative');
+          setNoOptionSatisfiesConstraints(hasImpossible);
+          setIsDemoMode(false);
+        } else {
+          throw new Error("No recommendations parsed");
+        }
+      } catch (err) {
+        console.error("Backend concierge unavailable, falling back to static demo:", err);
+        setIsDemoMode(true);
+        await animateStages();
+        if (budgetSelection === "free" || budgetSelection === "10" || !hasYmca) {
+          setNoOptionSatisfiesConstraints(true);
+          setRecommendations(USER_FACILITIES_IMPOSSIBLE);
+          setSelectedRecId(USER_FACILITIES_IMPOSSIBLE[0].facility.id);
+        } else {
+          setRecommendations(USER_FACILITIES_ELIGIBLE);
+          setSelectedRecId(USER_FACILITIES_ELIGIBLE[0].facility.id);
+        }
+      }
+    };
+
+    await Promise.all([
+      runBackendStream(),
+      new Promise(resolve => setTimeout(resolve, 1500))
+    ]);
 
     setIsSearching(false);
     setShowResults(true);
@@ -758,8 +805,30 @@ export default function App() {
       )}
 
       {/* 5. RECOMMENDATIONS GRID */}
+      {!showResults && !isSearching && (
+        <div className="white-card" style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b', marginBottom: '20px' }}>
+          <Compass className="w-8 h-8 text-blue-500" style={{ margin: '0 auto 12px auto' }} />
+          <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#1e293b', marginBottom: '4px' }}>No Workout Plan Loaded</h3>
+          <p style={{ fontSize: '0.8rem', margin: 0 }}>
+            Tell TravelWell where you'll be and what kind of workout you need.
+          </p>
+        </div>
+      )}
+
       {showResults && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {isDemoMode ? (
+            <div className="white-card" style={{ background: '#fef3c7', borderColor: '#fde68a', color: '#92400e', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <AlertTriangle className="w-4 h-4 text-amber-500" />
+              <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>Using demo data because the live concierge service is unavailable.</span>
+              <span style={{ marginLeft: 'auto', background: '#d97706', color: '#fff', fontSize: '0.625rem', fontWeight: 800, padding: '2px 6px', borderRadius: '4px', textTransform: 'uppercase' }}>Demo fallback data</span>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '4px' }}>
+              <span style={{ background: '#10b981', color: '#fff', fontSize: '0.625rem', fontWeight: 800, padding: '3px 8px', borderRadius: '4px', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' }}>✨ Live agent result</span>
+            </div>
+          )}
+
           {noOptionSatisfiesConstraints && (
             <div className="white-card" style={{ background: '#fef2f2', borderColor: '#fee2e2', color: '#b91c1c', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <AlertTriangle className="w-4 h-4 text-red-500" />

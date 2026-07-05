@@ -2,6 +2,40 @@
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
+## Local and Deployed Backend Integration
+
+TravelWell AI connects to a Python FastAPI backend powered by Google Agent Development Kit (ADK).
+
+### 1. Running locally with local backend
+1. Set up the backend `.env` variables (e.g. `GOOGLE_GENAI_USE_VERTEXAI=true` or `GEMINI_API_KEY`).
+2. Run backend server:
+   ```bash
+   cd backend
+   python -m uvicorn app.fast_api_app:app --host 0.0.0.0 --port 8000
+   ```
+3. Set up the frontend configuration:
+   Create `frontend/.env` file:
+   ```env
+   VITE_API_BASE_URL=http://localhost:8000
+   ```
+4. Run frontend:
+   ```bash
+   cd frontend
+   npm run dev
+   ```
+
+### 2. Running locally with deployed backend
+1. Find your deployed Cloud Run URL (e.g., `https://travelwell-backend-xxxxxx.a.run.app`).
+2. Update the frontend `.env` file:
+   ```env
+   VITE_API_BASE_URL=https://travelwell-backend-xxxxxx.a.run.app
+   ```
+3. Run the frontend:
+   ```bash
+   npm run dev
+   ```
+
+
 Currently, two official plugins are available:
 
 - [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
