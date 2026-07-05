@@ -21,6 +21,10 @@ export interface Facility {
   phone: string;
   website: string;
   rating: number;
+  coordinates: {
+    lat: number;
+    lng: number;
+  };
   amenities: string[];
   emoji_badges: string[];
   pricing: {
@@ -73,6 +77,7 @@ const USER_FACILITIES_ELIGIBLE: Recommendation[] = [
       phone: '+1 (312) 269-0500',
       website: 'https://www.ymcachicago.org',
       rating: 4.5,
+      coordinates: { lat: 41.8812, lng: -87.6246 },
       amenities: ['pool', 'treadmill', 'showers', 'lockers'],
       emoji_badges: ['🏊 Pool', '🏃 Treadmill', '🚿 Showers', '🔒 Lockers'],
       pricing: {
@@ -114,6 +119,7 @@ const USER_FACILITIES_ELIGIBLE: Recommendation[] = [
       phone: '+1 (312) 906-9900',
       website: 'https://ffc.com/clubs/union-station',
       rating: 4.7,
+      coordinates: { lat: 41.8781, lng: -87.6394 },
       amenities: ['pool', 'treadmill', 'showers', 'lockers', 'towels'],
       emoji_badges: ['🏊 Pool', '🏃 Treadmill', '🚿 Showers', '🔒 Lockers', '🧺 Towels'],
       pricing: {
@@ -155,6 +161,7 @@ const USER_FACILITIES_ELIGIBLE: Recommendation[] = [
       phone: '+1 (312) 207-1010',
       website: 'https://www.planetfitness.com',
       rating: 4.1,
+      coordinates: { lat: 41.8821, lng: -87.6475 },
       amenities: ['treadmill', 'showers', 'lockers'],
       emoji_badges: ['🏃 Treadmill', '🚿 Showers', '🔒 Lockers'],
       pricing: {
@@ -199,6 +206,7 @@ const USER_FACILITIES_IMPOSSIBLE: Recommendation[] = [
       phone: '+1 (312) 207-1010',
       website: 'https://www.planetfitness.com',
       rating: 4.1,
+      coordinates: { lat: 41.8821, lng: -87.6475 },
       amenities: ['treadmill', 'showers', 'lockers'],
       emoji_badges: ['🏃 Treadmill', '🚿 Showers', '🔒 Lockers'],
       pricing: {
@@ -240,6 +248,7 @@ const USER_FACILITIES_IMPOSSIBLE: Recommendation[] = [
       phone: '+1 (312) 269-0500',
       website: 'https://www.ymcachicago.org',
       rating: 4.5,
+      coordinates: { lat: 41.8812, lng: -87.6246 },
       amenities: ['pool', 'treadmill', 'showers', 'lockers'],
       emoji_badges: ['🏊 Pool', '🏃 Treadmill', '🚿 Showers', '🔒 Lockers'],
       pricing: {
@@ -268,6 +277,109 @@ const USER_FACILITIES_IMPOSSIBLE: Recommendation[] = [
     }
   }
 ];
+
+declare global {
+  interface Window {
+    initGoogleMap?: () => void;
+    google?: any;
+  }
+}
+
+interface GoogleMapProps {
+  apiKey: string;
+  recommendations: Recommendation[];
+  selectedId: string;
+  onSelectId: (id: string) => void;
+  showResults: boolean;
+}
+
+function GoogleMapComponent({ apiKey, recommendations, selectedId, onSelectId, showResults }: GoogleMapProps) {
+  const mapRef = React.useRef<HTMLDivElement>(null);
+  const mapInstanceRef = React.useRef<any>(null);
+  const markersRef = React.useRef<any[]>([]);
+
+  React.useEffect(() => {
+    if (window.google && window.google.maps) {
+      initMap();
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=initGoogleMap`;
+    script.async = true;
+    script.defer = true;
+    document.head.appendChild(script);
+
+    window.initGoogleMap = () => {
+      initMap();
+    };
+
+    return () => {
+      delete window.initGoogleMap;
+    };
+  }, [apiKey]);
+
+  const initMap = () => {
+    if (!mapRef.current || !window.google) return;
+    mapInstanceRef.current = new window.google.maps.Map(mapRef.current, {
+      center: { lat: 41.8817, lng: -87.6278 },
+      zoom: 14,
+      disableDefaultUI: true,
+      zoomControl: true
+    });
+  };
+
+  React.useEffect(() => {
+    if (!mapInstanceRef.current || !window.google) return;
+
+    markersRef.current.forEach(m => m.setMap(null));
+    markersRef.current = [];
+
+    const bounds = new window.google.maps.LatLngBounds();
+    const hotelPos = { lat: 41.8817, lng: -87.6278 };
+    bounds.extend(hotelPos);
+
+    const hotelMarker = new window.google.maps.Marker({
+      position: hotelPos,
+      map: mapInstanceRef.current,
+      title: "Your Hotel",
+      icon: "http://maps.google.com/mapfiles/ms/icons/red-dot.png"
+    });
+    markersRef.current.push(hotelMarker);
+
+    if (showResults) {
+      recommendations.forEach(rec => {
+        const coords = rec.facility.coordinates || { lat: 41.8817, lng: -87.6278 };
+        const isSelected = rec.facility.id === selectedId;
+        bounds.extend(coords);
+
+        const marker = new window.google.maps.Marker({
+          position: coords,
+          map: mapInstanceRef.current,
+          title: rec.facility.name,
+          icon: isSelected 
+            ? "http://maps.google.com/mapfiles/ms/icons/blue-dot.png" 
+            : "http://maps.google.com/mapfiles/ms/icons/green-dot.png"
+        });
+
+        marker.addListener('click', () => {
+          onSelectId(rec.facility.id);
+        });
+
+        markersRef.current.push(marker);
+      });
+
+      if (recommendations.length > 0) {
+        mapInstanceRef.current.fitBounds(bounds);
+      }
+    } else {
+      mapInstanceRef.current.setCenter(hotelPos);
+      mapInstanceRef.current.setZoom(14);
+    }
+  }, [recommendations, selectedId, showResults]);
+
+  return <div ref={mapRef} style={{ width: '100%', height: '100%', borderRadius: '8px' }} />;
+}
 
 export default function App() {
   // Input fields
@@ -627,132 +739,144 @@ export default function App() {
         {/* Middle Card: Fake Map Panel */}
         <div className="white-card" style={{ padding: '12px', position: 'relative' }}>
           <div className="map-visual">
-            <svg className="w-full h-full" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }} viewBox="0 0 800 450" preserveAspectRatio="none">
-              <defs>
-                <pattern id="grid-dots" width="30" height="30" patternUnits="userSpaceOnUse">
-                  <circle cx="1.5" cy="1.5" r="1.2" fill="rgba(37, 99, 235, 0.04)" />
-                </pattern>
-              </defs>
-              <rect width="100%" height="100%" fill="url(#grid-dots)" />
+            {import.meta.env.VITE_GOOGLE_MAPS_API_KEY ? (
+              <GoogleMapComponent 
+                apiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY} 
+                recommendations={recommendations} 
+                selectedId={selectedRecId} 
+                onSelectId={setSelectedRecId} 
+                showResults={showResults} 
+              />
+            ) : (
+              <>
+                <svg className="w-full h-full" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }} viewBox="0 0 800 450" preserveAspectRatio="none">
+                  <defs>
+                    <pattern id="grid-dots" width="30" height="30" patternUnits="userSpaceOnUse">
+                      <circle cx="1.5" cy="1.5" r="1.2" fill="rgba(37, 99, 235, 0.04)" />
+                    </pattern>
+                  </defs>
+                  <rect width="100%" height="100%" fill="url(#grid-dots)" />
 
-              {/* Street grids with text labels */}
-              <path d="M 120 0 L 120 450" stroke="#e2e8f0" strokeWidth="5" />
-              <path d="M 330 0 L 330 450" stroke="#e2e8f0" strokeWidth="5" />
-              <path d="M 640 0 L 640 450" stroke="#e2e8f0" strokeWidth="5" />
-              <path d="M 0 160 L 800 160" stroke="#e2e8f0" strokeWidth="5" />
-              <path d="M 0 320 L 800 320" stroke="#e2e8f0" strokeWidth="5" />
+                  {/* Street grids with text labels */}
+                  <path d="M 120 0 L 120 450" stroke="#e2e8f0" strokeWidth="5" />
+                  <path d="M 330 0 L 330 450" stroke="#e2e8f0" strokeWidth="5" />
+                  <path d="M 640 0 L 640 450" stroke="#e2e8f0" strokeWidth="5" />
+                  <path d="M 0 160 L 800 160" stroke="#e2e8f0" strokeWidth="5" />
+                  <path d="M 0 320 L 800 320" stroke="#e2e8f0" strokeWidth="5" />
 
-              <text x="128" y="40" fill="#94a3b8" fontSize="9" fontWeight="bold">Halsted St</text>
-              <text x="338" y="40" fill="#94a3b8" fontSize="9" fontWeight="bold">Jackson Blvd</text>
-              <text x="648" y="40" fill="#94a3b8" fontSize="9" fontWeight="bold">Michigan Ave</text>
-              <text x="20" y="152" fill="#94a3b8" fontSize="9" fontWeight="bold">Wacker Dr</text>
-              <text x="20" y="312" fill="#94a3b8" fontSize="9" fontWeight="bold">State St</text>
+                  <text x="128" y="40" fill="#94a3b8" fontSize="9" fontWeight="bold">Halsted St</text>
+                  <text x="338" y="40" fill="#94a3b8" fontSize="9" fontWeight="bold">Jackson Blvd</text>
+                  <text x="648" y="40" fill="#94a3b8" fontSize="9" fontWeight="bold">Michigan Ave</text>
+                  <text x="20" y="152" fill="#94a3b8" fontSize="9" fontWeight="bold">Wacker Dr</text>
+                  <text x="20" y="312" fill="#94a3b8" fontSize="9" fontWeight="bold">State St</text>
 
-              {/* Walking Radius Circles from starting hotel */}
-              <circle cx="450" cy="220" r="120" fill="none" stroke="rgba(37, 99, 235, 0.05)" strokeWidth="1" strokeDasharray="4,4" />
-              <text x="450" y="335" fill="#94a3b8" fontSize="8" textAnchor="middle">10 min walk radius</text>
-              <circle cx="450" cy="220" r="230" fill="none" stroke="rgba(37, 99, 235, 0.03)" strokeWidth="1" strokeDasharray="4,4" />
-              <text x="450" y="442" fill="#94a3b8" fontSize="8" textAnchor="middle">20 min walk radius</text>
+                  {/* Walking Radius Circles from starting hotel */}
+                  <circle cx="450" cy="220" r="120" fill="none" stroke="rgba(37, 99, 235, 0.05)" strokeWidth="1" strokeDasharray="4,4" />
+                  <text x="450" y="335" fill="#94a3b8" fontSize="8" textAnchor="middle">10 min walk radius</text>
+                  <circle cx="450" cy="220" r="230" fill="none" stroke="rgba(37, 99, 235, 0.03)" strokeWidth="1" strokeDasharray="4,4" />
+                  <text x="450" y="442" fill="#94a3b8" fontSize="8" textAnchor="middle">20 min walk radius</text>
 
-              {/* Travel routes to gyms: Blue for selected, Gray for alternatives */}
-              {showResults && recommendations.map((rec) => {
-                const isSelected = rec.facility.id === selectedRecId;
-                const pathD = rec.facility.id === 'ymca_chicago' 
-                  ? "M 450 220 L 640 220 L 640 280" 
-                  : rec.facility.id === 'ffc_union'
-                    ? "M 450 220 L 330 220 L 330 300"
-                    : "M 450 220 L 120 220 L 120 180";
-                return (
-                  <path 
-                    key={rec.facility.id}
-                    d={pathD} 
-                    fill="none" 
-                    stroke={isSelected ? "#2563eb" : "#cbd5e1"} 
-                    strokeWidth={isSelected ? "4.5" : "2.5"} 
-                    strokeDasharray={isSelected ? "none" : "5,5"}
-                    opacity={isSelected ? "1" : "0.6"}
-                  />
-                );
-              })}
+                  {/* Travel routes to gyms: Blue for selected, Gray for alternatives */}
+                  {showResults && recommendations.map((rec) => {
+                    const isSelected = rec.facility.id === selectedRecId;
+                    const pathD = rec.facility.id === 'ymca_chicago' 
+                      ? "M 450 220 L 640 220 L 640 280" 
+                      : rec.facility.id === 'ffc_union'
+                        ? "M 450 220 L 330 220 L 330 300"
+                        : "M 450 220 L 120 220 L 120 180";
+                    return (
+                      <path 
+                        key={rec.facility.id}
+                        d={pathD} 
+                        fill="none" 
+                        stroke={isSelected ? "#2563eb" : "#cbd5e1"} 
+                        strokeWidth={isSelected ? "4.5" : "2.5"} 
+                        strokeDasharray={isSelected ? "none" : "5,5"}
+                        opacity={isSelected ? "1" : "0.6"}
+                      />
+                    );
+                  })}
 
-              {/* Starting hotel pin */}
-              <circle cx="450" cy="220" r="7" fill="#ef4444" stroke="#ffffff" strokeWidth="2.5" />
-              <text x="450" y="202" fill="#1e293b" fontSize="9" fontWeight="bold" textAnchor="middle">📍 Your Hotel</text>
-            </svg>
+                  {/* Starting hotel pin */}
+                  <circle cx="450" cy="220" r="7" fill="#ef4444" stroke="#ffffff" strokeWidth="2.5" />
+                  <text x="450" y="202" fill="#1e293b" fontSize="9" fontWeight="bold" textAnchor="middle">📍 Your Hotel</text>
+                </svg>
 
-            {/* Pins directly with names attached */}
-            {showResults && recommendations.map((rec) => {
-              const isSelected = rec.facility.id === selectedRecId;
-              const position = rec.facility.id === 'ymca_chicago' 
-                ? { left: '640px', top: '280px' } 
-                : rec.facility.id === 'ffc_union'
-                  ? { left: '330px', top: '300px' }
-                  : { left: '120px', top: '180px' };
+                {/* Pins directly with names attached */}
+                {showResults && recommendations.map((rec) => {
+                  const isSelected = rec.facility.id === selectedRecId;
+                  const position = rec.facility.id === 'ymca_chicago' 
+                    ? { left: '640px', top: '280px' } 
+                    : rec.facility.id === 'ffc_union'
+                      ? { left: '330px', top: '300px' }
+                      : { left: '120px', top: '180px' };
 
-              const pinLabel = rec.rank === 1 ? "🏆 YMCA" : rec.rank === 2 ? "② FFC" : "③ Planet Fitness";
+                  const pinLabel = rec.rank === 1 ? "🏆 YMCA" : rec.rank === 2 ? "② FFC" : "③ Planet Fitness";
 
-              return (
-                <div 
-                  key={rec.facility.id}
-                  onClick={() => setSelectedRecId(rec.facility.id)}
-                  style={{
-                    position: 'absolute',
-                    left: position.left,
-                    top: position.top,
-                    transform: 'translate(-50%, -100%)',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    zIndex: isSelected ? 12 : 5
-                  }}
-                >
-                  {/* Small Walk/Drive travel bubble */}
-                  <div style={{
-                    background: isSelected ? '#1e3a8a' : '#475569',
-                    color: '#ffffff',
-                    fontSize: '0.58rem',
-                    fontWeight: 700,
-                    padding: '2px 6px',
-                    borderRadius: '4px',
-                    marginBottom: '2px',
-                    whiteSpace: 'nowrap'
-                  }}>
-                    🚶{rec.facility.distance.walking_time_minutes}m / 🚗{rec.facility.distance.transit_time_minutes}m
+                  return (
+                    <div 
+                      key={rec.facility.id}
+                      onClick={() => setSelectedRecId(rec.facility.id)}
+                      style={{
+                        position: 'absolute',
+                        left: position.left,
+                        top: position.top,
+                        transform: 'translate(-50%, -100%)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        zIndex: isSelected ? 12 : 5
+                      }}
+                    >
+                      {/* Small Walk/Drive travel bubble */}
+                      <div style={{
+                        background: isSelected ? '#1e3a8a' : '#475569',
+                        color: '#ffffff',
+                        fontSize: '0.58rem',
+                        fontWeight: 700,
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        marginBottom: '2px',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        🚶{rec.facility.distance.walking_time_minutes}m / 🚗{rec.facility.distance.transit_time_minutes}m
+                      </div>
+
+                      <div style={{
+                        background: isSelected ? '#2563eb' : '#ffffff',
+                        color: isSelected ? '#ffffff' : '#1e293b',
+                        fontSize: '0.68rem',
+                        fontWeight: 800,
+                        padding: '3px 8px',
+                        borderRadius: '4px',
+                        border: isSelected ? '1px solid #2563eb' : '1px solid #cbd5e1',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {pinLabel}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Map Legend */}
+                <div className="map-legend">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                    <span style={{ width: '8px', height: '8px', borderRadius: '99px', background: '#ef4444', display: 'inline-block' }} />
+                    <span>Hotel</span>
                   </div>
-
-                  <div style={{
-                    background: isSelected ? '#2563eb' : '#ffffff',
-                    color: isSelected ? '#ffffff' : '#1e293b',
-                    fontSize: '0.68rem',
-                    fontWeight: 800,
-                    padding: '3px 8px',
-                    borderRadius: '4px',
-                    border: isSelected ? '1px solid #2563eb' : '1px solid #cbd5e1',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                    whiteSpace: 'nowrap'
-                  }}>
-                    {pinLabel}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                    <span style={{ width: '12px', height: '2px', background: '#2563eb', display: 'inline-block' }} />
+                    <span>Selected Route</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                    <span style={{ width: '12px', height: '0px', borderBottom: '2px dashed #cbd5e1', display: 'inline-block' }} />
+                    <span>Alternative</span>
                   </div>
                 </div>
-              );
-            })}
-
-            {/* Map Legend */}
-            <div className="map-legend">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                <span style={{ width: '8px', height: '8px', borderRadius: '99px', background: '#ef4444', display: 'inline-block' }} />
-                <span>Hotel</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                <span style={{ width: '12px', height: '2px', background: '#2563eb', display: 'inline-block' }} />
-                <span>Selected Route</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                <span style={{ width: '12px', height: '0px', borderBottom: '2px dashed #cbd5e1', display: 'inline-block' }} />
-                <span>Alternative</span>
-              </div>
-            </div>
+              </>
+            )}
           </div>
         </div>
 

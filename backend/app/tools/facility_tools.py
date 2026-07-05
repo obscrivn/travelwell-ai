@@ -1,3 +1,17 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from typing import Dict, Any
 from app.services.mock_data import load_mock_data
 
@@ -11,10 +25,46 @@ def search_places(location: str, budget: float) -> Dict[str, Any]:
     Returns:
         A dictionary containing the search status and a list of candidate facilities.
     """
+    from app.services.google_maps import get_maps_api_key, search_places_live
+    key = get_maps_api_key()
+    if key:
+        places = search_places_live(location)
+        if places:
+            facilities = []
+            for p in places:
+                loc = p["geometry"].get("location", {})
+                lat = loc.get("lat", 41.8817)
+                lng = loc.get("lng", -87.6278)
+                facilities.append({
+                    "id": p["place_id"],
+                    "name": p["name"],
+                    "address": p["formatted_address"],
+                    "coordinates": {"lat": lat, "lng": lng},
+                    "rating": p.get("rating", 4.0),
+                    "user_ratings_total": p.get("user_ratings_total", 0),
+                    "pricing": {
+                        "access_type": "unknown",
+                        "cost": -1.0,
+                        "pass_detail": "Pricing information not identified in Places data."
+                    },
+                    "hours": {
+                        "open": "unknown",
+                        "close": "unknown",
+                        "warning": None
+                    },
+                    "amenities": [],
+                    "emoji_badges": []
+                })
+            return {
+                "status": "success",
+                "facilities": facilities,
+                "data_mode": "live"
+            }
+
+    # Fallback to mock data
     data = load_mock_data()
     scenario = None
     
-    # Try to find a matching scenario based on budget
     for s in data.get("scenarios", []):
         if "chicago" in location.lower() or "chicago" in s.get("scenario_id", "").lower():
             if budget <= 5.0 and s.get("scenario_id") == "chicago_impossible_budget":
@@ -44,6 +94,29 @@ def fetch_facility_details(facility_id: str) -> Dict[str, Any]:
     Returns:
         A dictionary containing pricing structure and verification status.
     """
+    from app.services.google_maps import get_maps_api_key, get_place_details_live
+    key = get_maps_api_key()
+    if key and not facility_id.startswith("mock_"):
+        details = get_place_details_live(facility_id)
+        if details:
+            return {
+                "status": "success",
+                "details": {
+                    "pricing": {
+                        "access_type": "unknown",
+                        "cost": -1.0,
+                        "pass_detail": "Pricing information not identified in Places details."
+                    },
+                    "source_metadata": {
+                        "provider": "google_places",
+                        "verified": True,
+                        "phone": details.get("formatted_phone_number", "Unknown"),
+                        "website": details.get("website", "Unknown"),
+                        "url": details.get("url", "Unknown")
+                    }
+                }
+            }
+
     data = load_mock_data()
     for scenario in data.get("scenarios", []):
         for fac in scenario.get("candidate_facilities_seed", []):
@@ -66,6 +139,31 @@ def scrape_schedules(facility_id: str) -> Dict[str, Any]:
     Returns:
         A dictionary containing open hours, amenities list, and crowd warnings.
     """
+    from app.services.google_maps import get_maps_api_key, get_place_details_live
+    key = get_maps_api_key()
+    if key and not facility_id.startswith("mock_"):
+        details = get_place_details_live(facility_id)
+        if details:
+            opening_hours = details.get("opening_hours", {})
+            weekday_text = opening_hours.get("weekday_text", [])
+            hours_str = ", ".join(weekday_text) if weekday_text else "Hours unknown"
+            return {
+                "status": "success",
+                "hours": {
+                    "open": "unknown",
+                    "close": "unknown",
+                    "warning": f"Opening hours schedule: {hours_str}"
+                },
+                "amenities": [],
+                "emoji_badges": [],
+                "reviews_summary": f"Google reviews score: {details.get('rating', 'N/A')} ({details.get('user_ratings_total', 0)} reviews). Website: {details.get('website', 'None')}",
+                "crowd_warning": None,
+                "recommendation_metadata": {
+                    "best_for": "Workout access via Google Places findings.",
+                    "limitations": "Pricing and amenities are not verified via Places API."
+                }
+            }
+
     data = load_mock_data()
     for scenario in data.get("scenarios", []):
         for fac in scenario.get("candidate_facilities_seed", []):

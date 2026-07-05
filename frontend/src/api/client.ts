@@ -20,6 +20,7 @@ const BASE_RECS = {
     phone: '+1 (312) 269-0500',
     website: 'https://www.ymcachicago.org',
     rating: 4.5,
+    coordinates: { lat: 41.8812, lng: -87.6246 },
     amenities: ['pool', 'treadmill', 'showers', 'lockers'],
     emoji_badges: ['🏊 Pool', '🏃 Treadmill', '🚿 Showers', '🔒 Lockers'],
     pricing: {
@@ -53,6 +54,7 @@ const BASE_RECS = {
     phone: '+1 (312) 906-9900',
     website: 'https://ffc.com/clubs/union-station',
     rating: 4.7,
+    coordinates: { lat: 41.8781, lng: -87.6394 },
     amenities: ['pool', 'treadmill', 'showers', 'lockers', 'towels'],
     emoji_badges: ['🏊 Pool', '🏃 Treadmill', '🚿 Showers', '🔒 Lockers', '🧺 Towels'],
     pricing: {
@@ -86,6 +88,7 @@ const BASE_RECS = {
     phone: '+1 (312) 207-1010',
     website: 'https://www.planetfitness.com',
     rating: 4.1,
+    coordinates: { lat: 41.8821, lng: -87.6475 },
     amenities: ['treadmill', 'showers', 'lockers'],
     emoji_badges: ['🏃 Treadmill', '🚿 Showers', '🔒 Lockers'],
     pricing: {

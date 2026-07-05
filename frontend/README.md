@@ -17,6 +17,7 @@ TravelWell AI connects to a Python FastAPI backend powered by Google Agent Devel
    Create `frontend/.env` file:
    ```env
    VITE_API_BASE_URL=http://localhost:8000
+   VITE_GOOGLE_MAPS_API_KEY=your-google-maps-key # Optional: loads live Google Map when set
    ```
 4. Run frontend:
    ```bash
@@ -29,6 +30,7 @@ TravelWell AI connects to a Python FastAPI backend powered by Google Agent Devel
 2. Update the frontend `.env` file:
    ```env
    VITE_API_BASE_URL=https://travelwell-backend-xxxxxx.a.run.app
+   VITE_GOOGLE_MAPS_API_KEY=your-google-maps-key
    ```
 3. Run the frontend:
    ```bash
