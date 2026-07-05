@@ -12,6 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from dotenv import load_dotenv
+# Load environment variables (e.g., Vertex AI / Google Cloud credentials)
+load_dotenv()
+
 from google.adk.agents.run_config import RunConfig, StreamingMode
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
@@ -23,7 +27,7 @@ from app.agent import root_agent
 def test_agent_stream() -> None:
     """
     Integration test for the agent stream functionality.
-    Tests that the agent returns valid streaming responses.
+    Tests that the agent returns valid streaming responses with recommendations.
     """
 
     session_service = InMemorySessionService()
@@ -32,7 +36,8 @@ def test_agent_stream() -> None:
     runner = Runner(agent=root_agent, session_service=session_service, app_name="test")
 
     message = types.Content(
-        role="user", parts=[types.Part.from_text(text="Why is the sky blue?")]
+        role="user", 
+        parts=[types.Part.from_text(text="I am at Downtown Chicago. I need to find a gym with showers and a pool between 6:00 PM and 9:00 PM. I have a YMCA membership, and my budget is $20.")]
     )
 
     events = list(
@@ -45,13 +50,22 @@ def test_agent_stream() -> None:
     )
     assert len(events) > 0, "Expected at least one message"
 
-    has_text_content = False
+    full_output = ""
     for event in events:
         if (
             event.content
             and event.content.parts
-            and any(part.text for part in event.content.parts)
         ):
-            has_text_content = True
-            break
-    assert has_text_content, "Expected at least one message with text content"
+            for part in event.content.parts:
+                if part.text:
+                    full_output += part.text
+
+    assert len(full_output) > 0, "Expected non-empty text content from the stream response"
+    
+    # Verify Downtown Chicago YMCA appears for the baseline mock scenario
+    assert "YMCA" in full_output, "Expected Downtown Chicago YMCA in the agent recommendation output"
+    
+    # Verify constraint validation language is present
+    assert "Constraint" in full_output or "Why this recommendation?" in full_output or "Eligibility" in full_output, (
+        "Expected validation policy or constraint checks in the output"
+    )
