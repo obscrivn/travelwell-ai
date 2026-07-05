@@ -1,0 +1,35 @@
+# Environments and packages
+.venv/
+.venv*
+venv/
+node_modules/
+
+# IDEs & System files
+.DS_Store
+.vscode/
+.idea/
+
+# Local configuration & credentials
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+*.pem
+*-key.json
+credentials*.json
+
+# Gemini internal directories
+.gemini/
+
+# Pytest / telemetry caches
+.pytest_cache/
+.coverage
+htmlcov/
+.nox/
+.tox/
+__pycache__/
+*.py[cod]
+
+# Logs
+*.log
