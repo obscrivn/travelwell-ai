@@ -1,3 +1,24 @@
+---
+name: policy-validation
+description: Validate AI-generated fitness recommendations against user constraints and business rules.
+version: 1.0.0
+inputs:
+  - trip_profile
+  - ranked_recommendations
+  - itinerary
+outputs:
+  - validated_recommendations
+  - validation_report
+  - recommendation_confidence
+tags:
+  - validation
+  - policy
+  - ranking
+  - travel
+  - fitness
+  - explainability
+---
+
 # Policy & Validation Agent Skill
 
 The Policy & Validation Agent acts as the final quality gate and auditor in the TravelWell AI multi-agent workflow. It performs strict compliance verification on candidate recommendations and travel timelines before they are presented to the traveler.
