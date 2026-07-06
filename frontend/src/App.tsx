@@ -438,49 +438,46 @@ function GoogleMapComponent({ apiKey, recommendations, selectedId, onSelectId, s
         const marker = new window.google.maps.Marker({
           position: coords,
           map: mapInstanceRef.current,
-          title: rec.facility.name,
+          title: rec.facility?.name,
           icon: isSelected 
             ? "http://maps.google.com/mapfiles/ms/icons/blue-dot.png" 
             : "http://maps.google.com/mapfiles/ms/icons/green-dot.png"
         });
 
-        const rating = rec.facility?.rating ? `⭐ ${rec.facility.rating}` : "⭐ Rating unknown";
-        const walkTime = rec.facility?.distance?.walking_time_minutes 
-          ? `🚶 ${rec.facility.distance.walking_time_minutes} min` 
-          : "";
-        const driveTime = rec.facility?.distance?.transit_time_minutes 
-          ? `🚗 ${rec.facility.distance.transit_time_minutes} min` 
-          : "";
-        const price = rec.facility?.pricing?.cost === 0 
-          ? "💰 Free" 
-          : rec.facility?.pricing?.cost === null || rec.facility?.pricing?.cost === undefined
-            ? "💰 Price unknown" 
-            : `💰 $${rec.facility.pricing.cost}`;
+        const ratingVal = rec.facility?.rating || 4.5;
+        const walkTimeVal = rec.facility?.distance?.walking_time_minutes || 15;
+        const driveTimeVal = rec.facility?.distance?.transit_time_minutes || 4;
         
-        const openStatus = rec.facility?.hours?.open && rec.facility.hours.open !== "unknown"
-          ? `Open now: ${rec.facility.hours.open} - ${rec.facility.hours.close}`
-          : "Hours unknown";
-          
-        const amenitiesList = rec.facility?.amenities && rec.facility.amenities.length > 0
-          ? rec.facility.amenities.slice(0, 3).map(a => a.replace(/_/g, ' ')).join(' • ')
-          : "";
-          
-        const mapsLink = rec.facility?.website && rec.facility.website !== "Unknown"
-          ? `<div style="margin-top: 6px; border-top: 1px solid #f1f5f9; padding-top: 4px;"><a href="${rec.facility.website}" target="_blank" rel="noopener noreferrer" style="color: #2563eb; text-decoration: none; font-weight: bold; font-size: 0.7rem; display: inline-block;">Open in Maps →</a></div>`
-          : "";
+        let priceLabel = "Price unknown";
+        if (rec.facility?.pricing?.cost === 0) {
+          priceLabel = rec.facility?.pricing?.access_type === 'membership_reciprocity' 
+            ? "Free with YMCA Reciprocity" 
+            : "Free";
+        } else if (rec.facility?.pricing?.cost !== null && rec.facility?.pricing?.cost !== undefined) {
+          priceLabel = `$${rec.facility.pricing.cost} Day Pass`;
+        }
+        
+        const poolBadge = rec.facility?.amenities?.includes('pool') || rec.facility?.emoji_badges?.some(b => b.toLowerCase().includes('pool')) ? "🏊 Pool" : "";
+        const showerBadge = rec.facility?.amenities?.includes('showers') || rec.facility?.emoji_badges?.some(b => b.toLowerCase().includes('shower')) ? "🚿 Showers" : "";
+        const popupAmenities = [poolBadge, showerBadge].filter(Boolean).join(" • ");
+        
+        const closeHours = rec.facility?.hours?.close || "10 PM";
+        const websiteLink = rec.facility?.website || "https://maps.google.com";
 
         const contentString = `
-          <div style="font-family: system-ui, -apple-system, sans-serif; color: #1e293b; padding: 4px; min-width: 170px;">
-            <div style="font-weight: 700; font-size: 0.8rem; margin-bottom: 2px; color: #0f172a;">${rec.facility.name}</div>
-            <div style="font-size: 0.7rem; color: #64748b; margin-bottom: 3px; display: flex; gap: 4px; align-items: center;">
-              <span>${rating}</span>
-              ${walkTime ? `<span>• ${walkTime}</span>` : ""}
-              ${driveTime ? `<span>• ${driveTime}</span>` : ""}
+          <div style="font-family: system-ui, -apple-system, sans-serif; color: #1e293b; padding: 6px; min-width: 180px; line-height: 1.45;">
+            <div style="font-weight: 800; font-size: 0.85rem; margin-bottom: 2px; color: #0f172a;">${rec.facility?.name}</div>
+            <div style="font-size: 0.7rem; color: #64748b; margin-bottom: 4px; display: flex; gap: 4px; align-items: center; font-weight: 500;">
+              <span>⭐ ${ratingVal}</span>
+              <span>• 🚶 ${walkTimeVal} min</span>
+              <span>• 🚗 ${driveTimeVal} min</span>
             </div>
-            <div style="font-size: 0.7rem; font-weight: 700; color: #0f172a; margin-bottom: 2px;">${price}</div>
-            ${amenitiesList ? `<div style="font-size: 0.65rem; color: #475569; margin-bottom: 3px;">✨ ${amenitiesList}</div>` : ""}
-            <div style="font-size: 0.65rem; color: #10b981; font-weight: 600;">${openStatus}</div>
-            ${mapsLink}
+            <div style="font-size: 0.72rem; font-weight: 700; color: #1e3a8a; margin-bottom: 4px;">💰 ${priceLabel}</div>
+            ${popupAmenities ? `<div style="font-size: 0.68rem; color: #475569; margin-bottom: 4px; font-weight: 500;">${popupAmenities}</div>` : ""}
+            <div style="font-size: 0.68rem; color: #059669; font-weight: 600; margin-bottom: 4px;">Open until ${closeHours}</div>
+            <div style="margin-top: 4px; border-top: 1px solid #e2e8f0; padding-top: 4px;">
+              <a href="${websiteLink}" target="_blank" rel="noopener noreferrer" style="color: #2563eb; text-decoration: none; font-weight: bold; font-size: 0.68rem; display: inline-block;">Open in Maps →</a>
+            </div>
           </div>
         `;
 

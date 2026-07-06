@@ -131,3 +131,59 @@ def test_recommend_endpoint_returns_structured_recommendation():
             assert rec["facility"]["name"] == "Life Time Fitness"
             assert rec["facility"]["pricing"]["cost"] == 20.0
             assert rec["eligibility_status"] == "Fits Your Criteria"
+
+
+def test_recommend_pricing_reciprocity_and_safety():
+    from app.fast_api_app import parse_markdown_to_recommendations
+    
+    # 1. YMCA member + YMCA facility => effective_price = 0
+    markdown_ymca = """
+Some introductory agent narrative text repeating prompt constraints.
+### Recommendation Card: YMCA Loop Center
+- Price: 💰 $25 Day Pass
+- Distance: 🚶 10 min
+- Coordinates: [41.89, -87.63]
+"""
+    recs_ymca = parse_markdown_to_recommendations(markdown_ymca, budget_sel="none", has_ymca=True)
+    assert len(recs_ymca) == 1
+    rec = recs_ymca[0]
+    assert rec["facility"]["name"] == "YMCA Loop Center"
+    assert rec["effective_price"] == 0.0
+    assert rec["access_type"] == "membership_reciprocity"
+    
+    # 2. Free-only budget rejects paid non-YMCA facilities
+    markdown_paid = """
+### Recommendation Card: FFC Union Station
+- Price: 💰 $20 Day Pass
+- Distance: 🚶 15 min
+"""
+    recs_free_budget = parse_markdown_to_recommendations(markdown_paid, budget_sel="free", has_ymca=False)
+    assert len(recs_free_budget) == 1
+    assert recs_free_budget[0]["eligibility_status"] == "Rejected"
+    
+    # 3. Map popup and card show identical effective_price
+    # Check effective_price at top level and facility pricing cost are equal
+    assert recs_free_budget[0]["effective_price"] == recs_free_budget[0]["facility"]["pricing"]["cost"]
+    
+    # 4. Facility name is never replaced by agent narrative text (discards prefix prose cards[0])
+    markdown_with_prefix = """
+This is an introductory narrative repeating "I understand your requirements at Hotel Chicago..."
+### Recommendation Card: Planet Fitness Chicago
+- Price: 💰 $10 Day Pass
+- Distance: 🚶 12 min
+"""
+    recs_with_prefix = parse_markdown_to_recommendations(markdown_with_prefix, budget_sel="20", has_ymca=False)
+    assert len(recs_with_prefix) == 1
+    # Check that name is the facility name, not the introductory prose
+    assert recs_with_prefix[0]["facility"]["name"] == "Planet Fitness Chicago"
+    
+    # 5. Missing live Place Details fields do not crash the parser
+    markdown_minimal = """
+### Recommendation Card: Minimalist Gym
+"""
+    recs_minimal = parse_markdown_to_recommendations(markdown_minimal, budget_sel="none", has_ymca=False)
+    assert len(recs_minimal) == 1
+    # Verify address defaults to "Unknown Address", coords default to Chicago loop, phone defaults to "Unknown Phone"
+    assert recs_minimal[0]["facility"]["address"] == "Unknown Address"
+    assert recs_minimal[0]["facility"]["phone"] == "Unknown Phone"
+    assert recs_minimal[0]["facility"]["coordinates"] == {"lat": 41.8817, "lng": -87.6278}
