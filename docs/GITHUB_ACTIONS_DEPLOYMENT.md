@@ -63,3 +63,22 @@ gcloud run services update-traffic travelwell-frontend \
   --project=your-gcp-project-id
 ```
 *(Replace `REVISION_NAME` with the targeted historical revision string, e.g., `00008-brs`)*
+
+---
+
+## 🌐 Custom Domains & CORS Management
+
+To route traffic via your production custom domains (`https://travelwellai.com` and `https://www.travelwellai.com`), ensure both domains are verified and mapped in the Google Cloud Console:
+
+1. **Cloud Run Domain Mapping:**
+   - Map `travelwellai.com` to the `travelwell-frontend` Cloud Run service.
+   - Map `api.travelwellai.com` or backend custom endpoints to `travelwell-backend` if applicable.
+
+2. **CORS Management via Environment Variables:**
+   - By default, the backend allows standard development origins (localhost) and default Cloud Run service URLs.
+   - To manage permitted domains without modifying code, configure the `CORS_ALLOWED_ORIGINS` environment variable on the `travelwell-backend` Cloud Run service.
+   - **Format:** A comma-separated list of allowed origins.
+     *Example:*
+     `CORS_ALLOWED_ORIGINS=https://travelwellai.com,https://www.travelwellai.com,https://travelwell-frontend-163831374566.us-central1.run.app`
+   - Update this variable directly in the Cloud Run service container settings or pass it via GitHub Actions secrets.
+

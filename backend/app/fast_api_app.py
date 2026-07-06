@@ -48,14 +48,21 @@ if logger is None:
     def log_struct_mock(info, severity="INFO"):
         py_logging.info(f"[{severity}] {info}")
     logger.log_struct = log_struct_mock
-allow_origins = [
+DEFAULT_ORIGINS = [
     "http://localhost:5173",
+    "http://localhost:4173",
+    "http://localhost:8000",
     "https://travelwell-frontend-163831374566.us-central1.run.app",
     "https://travelwell-frontend-msbiisna6q-uc.a.run.app",
-    "http://localhost:8000"
+    "https://travelwellai.com",
+    "https://www.travelwellai.com"
 ]
-if os.getenv("ALLOW_ORIGINS"):
-    allow_origins.extend(os.getenv("ALLOW_ORIGINS", "").split(","))
+
+custom_origins_env = os.getenv("CORS_ALLOWED_ORIGINS") or os.getenv("ALLOW_ORIGINS")
+if custom_origins_env:
+    allow_origins = [orig.strip() for orig in custom_origins_env.split(",") if orig.strip()]
+else:
+    allow_origins = DEFAULT_ORIGINS
 
 AGENT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -99,12 +106,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "https://travelwell-frontend-163831374566.us-central1.run.app",
-        "https://travelwell-frontend-msbiisna6q-uc.a.run.app",
-        "http://localhost:8000"
-    ],
+    allow_origins=allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
