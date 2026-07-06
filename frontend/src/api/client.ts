@@ -143,6 +143,14 @@ export async function runConciergeStream(
   });
 
   if (!response.ok) {
+    try {
+      const errJson = await response.json();
+      if (errJson && errJson.message) {
+        throw new Error(`Concierge backend error in [${errJson.stage}]: ${errJson.message}`);
+      }
+    } catch (e) {
+      // not JSON
+    }
     throw new Error(`Concierge backend error: ${response.statusText}`);
   }
 
@@ -168,6 +176,11 @@ export async function runConciergeStream(
         try {
           const rawData = JSON.parse(line.trim().substring(6));
           onEvent(rawData);
+          
+          if (rawData.author === 'system_error') {
+            throw new Error(`Concierge stream error in [${rawData.stage}]: ${rawData.message}`);
+          }
+          
           if (rawData.content && rawData.content.parts) {
             for (const part of rawData.content.parts) {
               if (part.text) {
