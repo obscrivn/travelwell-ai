@@ -148,9 +148,7 @@ async def recommend_workout(request: Request):
         
         runner = request.app.state.runner
         user_id = f"user_{os.urandom(4).hex()}"
-        
-        session_service = services.get_session_service()
-        session = await session_service.create_session(user_id=user_id, app_name=request.app.state.agent_app_name)
+        session_id = f"session_{os.urandom(4).hex()}"
     except Exception as e:
         tb = traceback.format_exc()
         print(f"API initialization error: {e}\n{tb}")
@@ -171,7 +169,7 @@ async def recommend_workout(request: Request):
             events = runner.run(
                 new_message=message,
                 user_id=user_id,
-                session_id=session.id,
+                session_id=session_id,
                 run_config=RunConfig(streaming_mode=StreamingMode.SSE)
             )
             for event in events:
