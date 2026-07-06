@@ -82,6 +82,16 @@ export interface Recommendation {
   opening_hours_summary?: string;
   is_open_now?: boolean;
   pool_hours?: string;
+  access_status?: 
+    | "verified_member_access"
+    | "verified_day_pass"
+    | "free_public_access"
+    | "unknown"
+    | "membership_required"
+    | "rejected";
+  access_source?: string;
+  membership_evidence?: string;
+  access_warnings?: string[];
 }
 
 interface ErrorBoundaryProps {

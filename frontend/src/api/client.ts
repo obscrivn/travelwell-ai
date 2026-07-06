@@ -334,7 +334,11 @@ export function parseMarkdownToRecommendations(markdown: string): Recommendation
       eligibility_status: (cleanEligibility || 'Fits Your Criteria') as any,
       recommendation_reason: rationale || 'Recommended by TravelWell AI based on preferences.',
       card_summary,
-      badge_subtitle: rank === 1 ? 'Highest overall score' : rank === 2 ? 'Highest rating' : 'Lowest paid guest pass'
+      badge_subtitle: rank === 1 ? 'Highest overall score' : rank === 2 ? 'Highest rating' : 'Lowest paid guest pass',
+      access_status: isFree ? "free_public_access" : "verified_day_pass",
+      access_source: "agent_markdown",
+      membership_evidence: isFree ? "Free admission verified." : "Paid pass required.",
+      access_warnings: []
     });
 
     rank++;
