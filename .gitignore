@@ -11,12 +11,15 @@ node_modules/
 
 # Local configuration & credentials
 .env
-.env.local
-.env.development
-.env.test
-.env.production
+.env.*
 *.pem
 *-key.json
+*sa-key*.json
+gcp-key.json
+google-credentials.json
+credentials.json
+service-account*.json
+*.service-account.json
 credentials*.json
 
 # Gemini internal directories

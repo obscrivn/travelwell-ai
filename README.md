@@ -130,18 +130,6 @@ The project is built to run containerized in Google Cloud:
 
 ---
 
-## 🖼️ Screenshots
-
-*Placeholders for application visuals:*
-
-| Dashboard | Interactive Map |
-|---|---|
-| ![Dashboard Place](https://raw.githubusercontent.com/obscrivn/travelwell-ai/main/docs/screenshots/dashboard.png) | ![Map Place](https://raw.githubusercontent.com/obscrivn/travelwell-ai/main/docs/screenshots/map.png) |
-
-| Recommendation Cards | AI Concierge Timeline |
-|---|---|
-| ![Cards Place](https://raw.githubusercontent.com/obscrivn/travelwell-ai/main/docs/screenshots/cards.png) | ![Timeline Place](https://raw.githubusercontent.com/obscrivn/travelwell-ai/main/docs/screenshots/timeline.png) |
-
 ---
 
 ## 📄 License
