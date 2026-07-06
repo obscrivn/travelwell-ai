@@ -1,126 +1,219 @@
-# TravelWell AI Architecture
+# TravelWell AI Architecture Specification
 
 TravelWell AI utilizes a hybrid architecture featuring a Python backend powered by the Google Agent Development Kit (ADK) and FastAPI, combined with a TypeScript/React frontend.
 
-## System Overview
+---
 
-```
-+---------------------------------------------------+
-|               React Frontend (UI)                 |
-|   - Trip Request Form   - Interactive Maps        |
-|   - Amenity Dashboard   - Agent Progress Trace    |
-+-------------------------+-------------------------+
-                          | JSON API (HTTP/SSE)
-                          v
-+---------------------------------------------------+
-|               FastAPI App (Backend)               |
-|   - Session Manager    - Event Streamer           |
-+-------------------------+-------------------------+
-                          | Orchestration
-                          v
-+---------------------------------------------------+
-|               Google ADK Workflow                 |
-|   - Concierge Orchestrator (Orchestration Pattern)|
-|   - Research & Intelligence (LLM Agent Pattern)    |
-|   - Ranking & Itinerary (LLM Agent Pattern)       |
-+-------------------------+-------------------------+
-                          | Tools / Services
-                          v
-+---------------------------------------------------+
-|               Services & Integration              |
-|   - Google Places API   - Web Scraper / Search    |
-|   - Routing Engine      - Mock Data Seed          |
-+---------------------------------------------------+
+## Component Diagram
+
+The following diagram illustrates the relationship between the client application, API routing layer, ADK multi-agent orchestrator, tools, and external services:
+
+```mermaid
+graph TB
+    subgraph Client [React Frontend Application]
+        UI[Interactive UI Component]
+        Map[Google Maps Component]
+        APIC[API Client client.ts]
+        UI --> APIC
+        Map --> APIC
+    end
+
+    subgraph API [API Serving Layer - FastAPI]
+        APIC --> CORS[CORS Middleware]
+        CORS --> RecRoute[POST /api/recommend]
+        CORS --> ConfigRoute[GET /api/config]
+        CORS --> GeocodeRoute[GET /resolve_location]
+    end
+
+    subgraph ADK [Orchestration Layer - Google ADK]
+        RecRoute --> SeqAgent[SequentialAgent Runner]
+        SeqAgent --> ResearchAgent[Research & Intelligence Agent]
+        SeqAgent --> RankingAgent[Ranking & Itinerary Agent]
+        SeqAgent --> PolicyAgent[Policy & Validation Agent]
+    end
+
+    subgraph Tools [Agent Tool Ecosystem]
+        ResearchAgent --> GMapTool[google_maps_geocoding]
+        ResearchAgent --> GPlacesTool[google_places_search]
+        RankingAgent --> GRoutesTool[google_maps_routes]
+    end
+
+    subgraph Cloud [External API & Cloud Services]
+        GMapTool --> GGeocode[Google Geocoding API]
+        GPlacesTool --> GPlaces[Google Places Text Search / Details]
+        GRoutesTool --> GRoutes[Google Routes API]
+        SeqAgent --> Vertex[Google Vertex AI / Gemini]
+    end
+
+    subgraph DB [State & Sessions]
+        SeqAgent --> Sessions[InMemory / VertexAi Session Service]
+    end
+
+    style Client fill:#d4ebf2,stroke:#333,stroke-width:2px
+    style API fill:#e8f0fe,stroke:#333,stroke-width:2px
+    style ADK fill:#fce8e6,stroke:#333,stroke-width:2px
+    style Tools fill:#fef7e0,stroke:#333,stroke-width:2px
+    style Cloud fill:#e6f4ea,stroke:#333,stroke-width:2px
 ```
 
 ---
 
-## 3 Core Agents vs. 7 User-Facing Workflow Stages
+## Execution Sequence Diagram
 
-To optimize performance and minimize latency, the physical implementation uses **3 Core Agents** and deterministic tools. However, for a high-fidelity user experience, the system maps execution checkpoints to the **7 logical stages** in the frontend progress trace and Agent Cards:
+The diagram below details the sequence of interactions that occur from the moment a traveler submits a search query until the final explainable recommendation cards and map markers are rendered:
 
-| Logical Stage | Executed By | Implementation Detail |
-| :--- | :--- | :--- |
-| **1. Trip Context** | `Concierge Orchestrator` | Extracts and parses traveler preferences (Structured Outputs via Pydantic). |
-| **2. Fitness Discovery** | `Research & Intelligence Agent` | Calls Places Discovery Service for nearby candidate facilities. |
-| **3. Access & Membership** | `Research & Intelligence Agent` | Evaluates pricing, day passes, guest passes, and membership compatibility. |
-| **4. Facility Intelligence** | `Research & Intelligence Agent` | Gathers schedules, reviews, crowd sentiment, and amenity checks. |
-| **5. Ranking** | `Ranking & Itinerary Agent` | Scores candidates based on weighted preferences. |
-| **6. Itinerary** | `Ranking & Itinerary Agent` | Maps transit buffers, durations, and calendar events. |
-| **7. Policy & Validation Layer** | Frontend / Concierge | Deterministically evaluates recommendations against explicit user rules. |
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as Traveler (Browser)
+    participant FE as React Frontend
+    participant BE as FastAPI Backend
+    participant AG as Sequential Agent (ADK)
+    participant RT as Research Agent
+    participant RK as Ranking Agent
+    participant PV as Policy Agent
+    participant GO as Google Maps APIs
+    participant VX as Vertex AI (Gemini)
+
+    User->>FE: Enter Location, Budget, & YMCA Membership
+    FE->>BE: GET /resolve_location?address=Willis+Tower
+    BE->>GO: Geocode landmark address / Places fallback
+    GO-->>BE: Resolved Display Name, Coordinates & Full Address
+    BE-->>FE: Return geocoded coordinates & display details
+    FE->>BE: POST /api/recommend (Search Parameters & Coordinates)
+    BE->>AG: Initialize session & Run Sequential Pipeline
+
+    Note over AG,RT: Stage 1-4: Research & Intelligence
+    AG->>RT: Invoke Research Agent with Prompt
+    RT->>VX: Query Vertex AI for reasoning
+    RT->>GO: search_places & fetch_facility_details
+    GO-->>RT: Gym lists, open hours, prices, amenities
+    RT-->>BE: Yield research_intelligence state stream
+    BE-->>FE: Stream Stage 2-4 progress updates (SSE)
+
+    Note over AG,RK: Stage 5-6: Ranking & Itinerary
+    AG->>RK: Invoke Ranking Agent with places metadata
+    RK->>VX: Query Vertex AI for reasoning
+    RK->>GO: calculate_route_distances (walking/driving duration)
+    GO-->>RK: Distance matrices & route durations
+    RK-->>BE: Yield ranking_itinerary state stream
+    BE-->>FE: Stream Stage 5-6 progress updates (SSE)
+
+    Note over AG,PV: Stage 7: Policy & Validation
+    AG->>PV: Invoke Policy Agent
+    PV->>VX: Query Vertex AI for policy compliance checks
+    PV->>PV: Validate budget, check YMCA reciprocity, verify amenities
+    PV-->>BE: Generate final markdown reports & constraints audits
+    BE-->>FE: Yield policy_validation stream (SSE)
+    FE->>FE: Parse markdown details & populate recommendation list
+    FE->>User: Render Interactive Map Markers & Facility Detail Cards
+```
 
 ---
 
-## Clean Separation Project Structure
+## Deployment & Infrastructure Diagram
+
+The deployment model utilizes fully managed serverless infrastructure on Google Cloud Platform (GCP) to deliver low latency, high availability, and secure secret configuration management:
+
+```mermaid
+graph TB
+    subgraph Internet [Public Web Access]
+        User[Traveler Browser]
+    end
+
+    subgraph GCP [Google Cloud Platform]
+        subgraph FrontendRun [Cloud Run - Frontend Service]
+            Nginx[Nginx Container]
+            NginxConfig[entrypoint.sh Config generator]
+        end
+
+        subgraph BackendRun [Cloud Run - Backend Service]
+            FastAPI[FastAPI Container]
+            ADKCore[Google ADK Engine]
+            FastAPIConfig[Lifespan Context]
+        end
+
+        subgraph IAM [IAM & Security]
+            SA[Service Account: travelwell-cloudrun-sa]
+        end
+
+        subgraph APIs [Google APIs Integration]
+            VertexAI[Vertex AI Platform]
+            MapsPlatform[Google Maps Platform]
+        end
+    end
+
+    User -->|HTTPS| Nginx
+    Nginx -->|GET /config.json| NginxConfig
+    NginxConfig -->|Read Backend URL| Nginx
+    Nginx -->|POST /api/recommend| FastAPI
+    FastAPI -->| Lifespan Init | FastAPIConfig
+    FastAPIConfig -->| Run Agents | ADKCore
+    ADKCore -->| Gemini Inference | VertexAI
+    ADKCore -->| Places & Routes Queries | MapsPlatform
+    FastAPI -->|GET /api/config| MapsPlatform
+    SA -->|Authorize| BackendRun
+    SA -->|Authorize| VertexAI
+
+    style FrontendRun fill:#d4ebf2,stroke:#333,stroke-width:1px
+    style BackendRun fill:#e8f0fe,stroke:#333,stroke-width:1px
+    style APIs fill:#e6f4ea,stroke:#333,stroke-width:1px
+```
+
+---
+
+## Agent Specifications & Technical Details
+
+### 1. Research & Intelligence Agent
+*   **System Role:** Discovery and data aggregator.
+*   **Model Engine:** Vertex AI / Gemini.
+*   **Ecosystem Tools:**
+    *   `google_places_search`: Performs nearby searches for candidate gyms and fitness centers within travel radiuses.
+    *   `fetch_facility_details`: Resolves operational details (website, phone, user reviews, opening hours, cost/rates, pools, showers, and treadmills).
+*   **Key Behavior:** Evaluates raw text queries and geocodes partial landmarks, neighborhoods, or addresses. Preserves uncertainty by mapping missing values to `None`/`Unknown` rather than hallucinating prices or amenities.
+
+### 2. Ranking & Itinerary Agent
+*   **System Role:** Geographical filter and path planner.
+*   **Model Engine:** Vertex AI / Gemini.
+*   **Ecosystem Tools:**
+    *   `google_maps_routes`: Queries routing tables to compute walking and driving coordinates, distances, and duration intervals between the traveler's coordinates and target venues.
+*   **Key Behavior:** Calculates transit durations, applies proximity scores, and formats a list of travel recommendations based on distance limits.
+
+### 3. Policy & Validation Agent
+*   **System Role:** Decision compiler and compliance auditor.
+*   **Model Engine:** Vertex AI / Gemini.
+*   **Key Behavior:** Iterates deterministically over gym pricing, time windows, and user preferences. Handles logic checks:
+    *   *YMCA Reciprocity Rule:* If the user has a YMCA membership and the facility name indicates YMCA, marks pricing access status as "free" with $0 guest pass requirements.
+    *   *Budget Constraints Check:* Discards facilities with known guest pass rates above the user's budget.
+    *   *Amenity Enforcement:* Double-checks mandatory amenities (showers/parking) and rates confidence statuses (*Excellent Match*, *Good Alternative*, *Limited Match*).
+
+---
+
+## Repository Project Layout
 
 ```
 travelwell-ai/
-├── .agents-cli-spec.md         # CLI Project Specification
+├── README.md                   # Project overview, quickstart & feature list
+├── .agents-cli-spec.md         # Google ADK CLI runtime configuration schema
 ├── docs/
-│   ├── ARCHITECTURE.md         # Current Architecture Spec
-│   ├── API_CONTRACTS.md        # API Schema definitions
-│   └── PROJECT_CHARTER.md      # Primary project goals
-├── backend/                    # Cleanly Isolated Python Backend
-│   ├── src/
-│   │   ├── agents/
-│   │   │   ├── __init__.py
-│   │   │   ├── cards.py        # Agent cards (metadata, roles, I/O specifications)
-│   │   │   ├── registry.py     # Central Agent Registry
-│   │   │   ├── orchestrator.py # Concierge Orchestrator Workflow
-│   │   │   ├── research.py     # Research & Intelligence Agent
-│   │   │   └── rank_itinerary.py # Ranking & Itinerary Agent
-│   │   ├── services/
-│   │   │   ├── __init__.py
-│   │   │   ├── places.py       # Google Places / Mock Wrapper
-│   │   │   ├── routing.py      # Google Maps Routing / Mock Wrapper
-│   │   │   └── scraper.py      # Facility Schedule Scraper / Mock Wrapper
-│   │   ├── types/
-│   │   │   ├── __init__.py
-│   │   │   └── schemas.py      # Pydantic schemas (TripProfile, Itinerary, etc.)
-│   │   ├── main.py             # FastAPI Application entrypoint
-│   │   └── config.py           # Env/API Configs
-│   ├── pyproject.toml          # Python/UV dependency declaration
-│   └── .env.example
-├── frontend/                   # Cleanly Isolated TypeScript/React Frontend
-│   ├── src/
-│   ├── package.json
-│   ├── tsconfig.json
-│   └── vite.config.ts
-└── tests/
-    ├── mock_data.json          # Seed data for offline/deterministic runs
-    └── test_workflow.py        # Code correctness tests
+│   ├── ARCHITECTURE.md         # Current file (Technical specification & diagrams)
+│   ├── API_CONTRACTS.md        # REST endpoint specifications & schema payloads
+│   └── PROJECT_CHARTER.md      # Strategic overview & target product milestones
+├── backend/                    # Python FastAPI & Google ADK backend app
+│   ├── app/
+│   │   ├── app_utils/          # Core helpers, session registry & logging hooks
+│   │   ├── services/           # Google Maps Geocoding, Places, and Routes wrappers
+│   │   ├── tools/              # ADK tool definitions bound to Google APIs
+│   │   ├── agent.py            # ADK agent cards, system prompts & sequential routes
+│   │   └── fast_api_app.py     # FastAPI application and public REST /api/recommend endpoint
+│   ├── tests/                  # Integration, unit, and rate-limit resilient tests
+│   └── pyproject.toml          # Package configuration & UV dependency declarations
+└── frontend/                   # React TypeScript frontend app
+    ├── src/
+    │   ├── api/
+    │   │   └── client.ts       # SSE event-stream parser & REST endpoints connector
+    │   ├── App.tsx             # Interactive dashboard, maps synchronizer & timeline tracker
+    │   └── main.tsx
+    ├── entrypoint.sh           # Dynamic container config.json generator
+    └── package.json
 ```
-
----
-
-## Agent Definitions
-
-### 1. Concierge Orchestrator Agent
-* **Pattern:** ADK workflow/orchestration pattern
-* **Purpose:** Orchestrates the flow. It accepts user input, coordinates the execution of the Research and Ranking/Itinerary agents, records trace updates in the execution state, and emits trace events for the UI.
-* **Input Schema:** `UserRequest` (raw prompt, location, time constraints, memberships).
-* **Output Schema:** `ConciergeResponse` (ranked recommendations, schedule, stages trace log).
-
-### 2. Research & Intelligence Agent
-* **Pattern:** ADK LLM agent pattern
-* **Purpose:** Acts as a specialized research assistant. Discovers gyms and facilities using Places tools, queries day-pass pricing/rules, and analyzes details (hours, pool schedules, overcrowding feedback).
-* **Tools:** `search_places`, `fetch_facility_details`, `scrape_schedules`.
-
-### 3. Ranking & Itinerary Agent
-* **Pattern:** ADK LLM agent pattern
-* **Purpose:** Decides the best options using multi-criteria preference matching, calculates distances and travel durations using a routing tool, and creates a formatted timeline.
-* **Tools:** `calculate_route_distances`.
-
----
-
-## Trace & Execution Events
-
-To stream the progress of the multi-agent execution, the backend emits workflow updates carrying a payload containing the current `stage` progress. The frontend listens to these updates to animate the Agent Cards progress list:
-
-* `TRIP_CONTEXT_STARTED` ➔ Parsing parameters.
-* `FITNESS_DISCOVERY_STARTED` ➔ Querying Google Places.
-* `ACCESS_VERIFICATION_STARTED` ➔ Validating memberships & day pass pricing.
-* `FACILITY_INTELLIGENCE_STARTED` ➔ Summarizing amenities, hours, and crowd warning.
-* `RANKING_STARTED` ➔ Scoring candidates.
-* `ITINERARY_STARTED` ➔ Computing routes and timeline buffers.
-* `POLICY_VALIDATION_READY` ➔ Dispatching complete verified recommendation JSON.
