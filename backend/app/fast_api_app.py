@@ -97,6 +97,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "https://travelwell-frontend-163831374566.us-central1.run.app",
+        "https://travelwell-frontend-msbiisna6q-uc.a.run.app",
         "http://localhost:8000"
     ],
     allow_credentials=True,
@@ -177,6 +178,7 @@ async def recommend_workout(request: Request):
         return JSONResponse(
             status_code=500,
             content={
+                "type": "error",
                 "error_type": type(e).__name__,
                 "stage": "initialization",
                 "message": str(e),
@@ -214,6 +216,7 @@ async def recommend_workout(request: Request):
                 err_msg = "Google Vertex AI Rate limit exceeded (429 Resource Exhausted). Please wait a moment and try again."
                 
             err_dict = {
+                "type": "error",
                 "author": "system_error",
                 "error_type": type(e).__name__,
                 "stage": current_agent,

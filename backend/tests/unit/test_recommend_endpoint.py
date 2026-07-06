@@ -41,3 +41,29 @@ def test_config_endpoint():
         assert response.status_code == 200
         data = response.json()
         assert data["mapsApiKey"] == "test-key-123"
+
+def test_recommend_endpoint_success():
+    mock_event = MagicMock()
+    mock_event.author = "policy_validation"
+    mock_event.content.role = "model"
+    mock_event.content.parts = [MagicMock(text="### Recommendation Card: Life Time")]
+    
+    with patch("google.adk.runners.Runner.run") as mock_run:
+        mock_run.return_value = [mock_event]
+        
+        with TestClient(app) as client:
+            response = client.post("/api/recommend", json={
+                "location": "Chicago",
+                "timeWindow": "6:00 PM - 9:00 PM",
+                "budgetSelection": "20",
+                "hasYmca": False,
+                "showersReq": False,
+                "parkingReq": False,
+                "poolPref": False,
+                "treadmillPref": False
+            })
+            assert response.status_code == 200
+            assert "text/event-stream" in response.headers["content-type"]
+            body_content = response.text
+            assert "policy_validation" in body_content
+            assert "Life Time" in body_content

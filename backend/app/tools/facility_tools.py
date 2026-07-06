@@ -34,9 +34,9 @@ def search_places(location: str, budget: float) -> Dict[str, Any]:
         if places:
             facilities = []
             for p in places:
-                loc = p["geometry"].get("location", {})
-                lat = loc.get("lat", resolved.get("lat", 41.8817))
-                lng = loc.get("lng", resolved.get("lng", -87.6278))
+                loc = (p.get("geometry") or {}).get("location") or {}
+                lat = loc.get("lat") or resolved.get("lat") or 41.8817
+                lng = loc.get("lng") or resolved.get("lng") or -87.6278
                 facilities.append({
                     "id": p["place_id"],
                     "name": p["name"],
@@ -103,37 +103,36 @@ def fetch_facility_details(facility_id: str, has_ymca: bool = False) -> Dict[str
     
     # 1. Live mode
     if key and not facility_id.startswith("mock_"):
-        details = get_place_details_live(facility_id)
-        if details:
-            name = details.get("name", "")
-            is_ymca = "ymca" in name.lower()
-            
+        details = get_place_details_live(facility_id) or {}
+        name = details.get("name", "")
+        is_ymca = "ymca" in name.lower()
+        
+        pricing = {
+            "access_type": "unknown",
+            "cost": -1.0,
+            "pass_detail": "Pricing information not identified in Places details."
+        }
+        
+        if has_ymca and is_ymca:
             pricing = {
-                "access_type": "unknown",
-                "cost": -1.0,
-                "pass_detail": "Pricing information not identified in Places details."
+                "access_type": "membership_reciprocity",
+                "cost": 0.0,
+                "pass_detail": "Free access via national YMCA membership reciprocity."
             }
             
-            if has_ymca and is_ymca:
-                pricing = {
-                    "access_type": "membership_reciprocity",
-                    "cost": 0.0,
-                    "pass_detail": "Free access via national YMCA membership reciprocity."
-                }
-                
-            return {
-                "status": "success",
-                "details": {
-                    "pricing": pricing,
-                    "source_metadata": {
-                        "provider": "google_places",
-                        "verified": True,
-                        "phone": details.get("formatted_phone_number", "Unknown"),
-                        "website": details.get("website", "Unknown"),
-                        "url": details.get("url", "Unknown")
-                    }
+        return {
+            "status": "success",
+            "details": {
+                "pricing": pricing,
+                "source_metadata": {
+                    "provider": "google_places",
+                    "verified": bool(details),
+                    "phone": details.get("formatted_phone_number", "Unknown") or "Unknown",
+                    "website": details.get("website", "Unknown") or "Unknown",
+                    "url": details.get("url", "Unknown") or "Unknown"
                 }
             }
+        }
 
     # 2. Mock mode fallback
     data = load_mock_data()
@@ -179,27 +178,26 @@ def scrape_schedules(facility_id: str) -> Dict[str, Any]:
     from app.services.google_maps import get_maps_api_key, get_place_details_live
     key = get_maps_api_key()
     if key and not facility_id.startswith("mock_"):
-        details = get_place_details_live(facility_id)
-        if details:
-            opening_hours = details.get("opening_hours", {})
-            weekday_text = opening_hours.get("weekday_text", [])
-            hours_str = ", ".join(weekday_text) if weekday_text else "Hours unknown"
-            return {
-                "status": "success",
-                "hours": {
-                    "open": "unknown",
-                    "close": "unknown",
-                    "warning": f"Opening hours schedule: {hours_str}"
-                },
-                "amenities": [],
-                "emoji_badges": [],
-                "reviews_summary": f"Google reviews score: {details.get('rating', 'N/A')} ({details.get('user_ratings_total', 0)} reviews). Website: {details.get('website', 'None')}",
-                "crowd_warning": None,
-                "recommendation_metadata": {
-                    "best_for": "Workout access via Google Places findings.",
-                    "limitations": "Pricing and amenities are not verified via Places API."
-                }
+        details = get_place_details_live(facility_id) or {}
+        opening_hours = details.get("opening_hours") or {}
+        weekday_text = opening_hours.get("weekday_text", []) if opening_hours else []
+        hours_str = ", ".join(weekday_text) if weekday_text else "Hours unknown"
+        return {
+            "status": "success",
+            "hours": {
+                "open": "unknown",
+                "close": "unknown",
+                "warning": f"Opening hours schedule: {hours_str}"
+            },
+            "amenities": [],
+            "emoji_badges": [],
+            "reviews_summary": f"Google reviews score: {details.get('rating', 'N/A')} ({details.get('user_ratings_total', 0)} reviews). Website: {details.get('website', 'None')}",
+            "crowd_warning": None,
+            "recommendation_metadata": {
+                "best_for": "Workout access via Google Places findings.",
+                "limitations": "Pricing and amenities are not verified via Places API."
             }
+        }
 
     data = load_mock_data()
     for scenario in data.get("scenarios", []):

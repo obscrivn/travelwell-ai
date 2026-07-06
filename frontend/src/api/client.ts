@@ -177,12 +177,13 @@ export async function runConciergeStream(
 
     for (const line of lines) {
       if (line.trim().startsWith('data: ')) {
+        let errorToThrow: Error | null = null;
         try {
           const rawData = JSON.parse(line.trim().substring(6));
           onEvent(rawData);
           
-          if (rawData.author === 'system_error') {
-            throw new Error(`Concierge stream error in [${rawData.stage}]: ${rawData.message}`);
+          if (rawData.author === 'system_error' || rawData.type === 'error' || rawData.author === 'error') {
+            errorToThrow = new Error(`Concierge stream error in [${rawData.stage || 'unknown'}]: ${rawData.message}`);
           }
           
           if (rawData.content && rawData.content.parts) {
@@ -195,6 +196,9 @@ export async function runConciergeStream(
           }
         } catch (e) {
           // ignore parse errors for partial lines
+        }
+        if (errorToThrow) {
+          throw errorToThrow;
         }
       }
     }

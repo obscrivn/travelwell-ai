@@ -27,38 +27,41 @@ def calculate_route_distances(facility_id: str) -> Dict[str, Any]:
     from app.services.google_maps import get_maps_api_key, get_route_live, get_place_details_live
     key = get_maps_api_key()
     if key and not facility_id.startswith("mock_"):
-        details = get_place_details_live(facility_id)
-        if details:
-            dest_coords = details.get("geometry", {}).get("location", {})
-            dest_lat = dest_coords.get("lat")
-            dest_lng = dest_coords.get("lng")
-            if dest_lat and dest_lng:
-                dest_str = f"{dest_lat},{dest_lng}"
-                origin_str = "41.8817,-87.6278"
-                walk_route = get_route_live(origin_str, dest_str, "walking")
-                drive_route = get_route_live(origin_str, dest_str, "driving")
-                
-                walk_min = 15
-                if walk_route and "duration_value_seconds" in walk_route:
-                    walk_min = max(1, int(walk_route["duration_value_seconds"] / 60))
-                
-                drive_min = 5
-                if drive_route and "duration_value_seconds" in drive_route:
-                    drive_min = max(1, int(drive_route["duration_value_seconds"] / 60))
-                
+        details = get_place_details_live(facility_id) or {}
+        dest_coords = details.get("geometry", {}).get("location", {}) if details.get("geometry") else {}
+        dest_lat = dest_coords.get("lat") or 41.8962 # River North area default
+        dest_lng = dest_coords.get("lng") or -87.6287
+        
+        dest_str = f"{dest_lat},{dest_lng}"
+        origin_str = "41.8817,-87.6278"
+        walk_route = get_route_live(origin_str, dest_str, "walking")
+        drive_route = get_route_live(origin_str, dest_str, "driving")
+        
+        walk_min = 15
+        if walk_route and "duration_value_seconds" in walk_route:
+            walk_min = max(1, int(walk_route["duration_value_seconds"] / 60))
+        
+        drive_min = 5
+        if drive_route and "duration_value_seconds" in drive_route:
+            drive_min = max(1, int(drive_route["duration_value_seconds"] / 60))
+        
+        dist_miles = 0.5
+        if walk_route and "distance_text" in walk_route:
+            try:
+                dist_text = walk_route["distance_text"]
+                cleaned_dist = "".join([c for c in dist_text if c.isdigit() or c == "."])
+                dist_miles = float(cleaned_dist)
+            except Exception:
                 dist_miles = 0.5
-                if walk_route and "distance_text" in walk_route:
-                    dist_text = walk_route["distance_text"]
-                    dist_miles = float(dist_text.replace("mi", "").replace("km", "").replace("ft", "").strip())
-                
-                return {
-                    "status": "success",
-                    "travel_metadata": {
-                        "walk_minutes": walk_min,
-                        "drive_minutes": drive_min,
-                        "distance_miles": dist_miles
-                    }
-                }
+        
+        return {
+            "status": "success",
+            "travel_metadata": {
+                "walk_minutes": walk_min,
+                "drive_minutes": drive_min,
+                "distance_miles": dist_miles
+            }
+        }
 
     data = load_mock_data()
     for scenario in data.get("scenarios", []):
