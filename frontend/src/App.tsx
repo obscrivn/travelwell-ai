@@ -696,18 +696,28 @@ export default function App() {
           </div>
           <div>
             <div className="brand-name">TravelWell AI</div>
-            <div className="brand-tagline">Intelligent workout concierge on the road</div>
+            <div className="brand-tagline">Find Your Perfect Workout. Anywhere. Anytime.</div>
           </div>
         </div>
       </header>
 
       {/* 2. HERO GREETING */}
       <section className="hero">
-        <div className="concierge-summary-card" style={{ background: '#eff6ff', borderLeft: '4px solid #2563eb', padding: '12px 16px', borderRadius: '8px', fontSize: '0.85rem', color: '#1e3a8a', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-          <span>👋</span>
-          <span><strong>Hello! I am your AI Fitness Concierge.</strong> Please make your selections below and I will find exactly where you can work out on your trip.</span>
+        <h1 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0f172a', margin: '0 0 4px 0' }}>
+          TravelWell AI
+        </h1>
+        <h2 style={{ fontSize: '0.95rem', fontWeight: 600, color: '#2563eb', margin: '0 0 6px 0' }}>
+          Find Your Perfect Workout. Anywhere. Anytime.
+        </h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
+          <span style={{ background: '#eff6ff', color: '#1e40af', fontSize: '0.725rem', fontWeight: 700, padding: '3px 8px', borderRadius: '4px' }}>
+            ⚡ Powered by Explainable Multi-Agent AI
+          </span>
+          <span style={{ background: '#ecfdf5', color: '#065f46', fontSize: '0.725rem', fontWeight: 700, padding: '3px 8px', borderRadius: '4px' }}>
+            🛡️ Every recommendation explained
+          </span>
         </div>
-        <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '4px 0 0 0' }}>Find matches that fit your active memberships, travel schedule, and facility checklists.</p>
+        <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '4px 0 0 0' }}>Compare fitness matches that fit your active memberships, travel schedule, and facility checklists.</p>
       </section>
 
       {/* 3. DASHBOARD GRID (3 Columns: Form, Map, Vertical Workflow) */}
@@ -881,7 +891,50 @@ export default function App() {
         {/* Middle Card: Fake Map Panel */}
         <div className="white-card" style={{ padding: '12px', position: 'relative' }}>
           <div className="map-visual">
-            {config.mapsApiKey ? (
+            {!showResults && !isSearching ? (
+              <div style={{
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                alignItems: 'center',
+                padding: '24px',
+                textAlign: 'center',
+                background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+                borderRadius: '8px',
+                border: '2px dashed #cbd5e1'
+              }}>
+                <div style={{
+                  background: '#dbeafe',
+                  color: '#2563eb',
+                  padding: '12px',
+                  borderRadius: '999px',
+                  marginBottom: '16px'
+                }}>
+                  <Compass className="w-8 h-8" />
+                </div>
+                <h3 style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a', marginBottom: '8px' }}>
+                  Ready to Plan Your Workout?
+                </h3>
+                <p style={{ fontSize: '0.8rem', color: '#475569', maxWidth: '280px', lineHeight: '1.4', marginBottom: '20px' }}>
+                  Tell TravelWell where you’ll be, and I’ll find your best workout options nearby.
+                </p>
+                <div style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: '8px',
+                  justifyContent: 'center',
+                  maxWidth: '320px'
+                }}>
+                  <span style={{ background: '#ffffff', color: '#334155', fontSize: '0.7rem', fontWeight: 600, padding: '4px 10px', borderRadius: '99px', border: '1px solid #e2e8f0', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>📍 Location</span>
+                  <span style={{ background: '#ffffff', color: '#334155', fontSize: '0.7rem', fontWeight: 600, padding: '4px 10px', borderRadius: '99px', border: '1px solid #e2e8f0', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>🕕 Time window</span>
+                  <span style={{ background: '#ffffff', color: '#334155', fontSize: '0.7rem', fontWeight: 600, padding: '4px 10px', borderRadius: '99px', border: '1px solid #e2e8f0', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>💳 Budget</span>
+                  <span style={{ background: '#ffffff', color: '#334155', fontSize: '0.7rem', fontWeight: 600, padding: '4px 10px', borderRadius: '99px', border: '1px solid #e2e8f0', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>🏋️ Workout preference</span>
+                  <span style={{ background: '#ffffff', color: '#334155', fontSize: '0.7rem', fontWeight: 600, padding: '4px 10px', borderRadius: '99px', border: '1px solid #e2e8f0', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>🔑 Memberships</span>
+                  <span style={{ background: '#ffffff', color: '#334155', fontSize: '0.7rem', fontWeight: 600, padding: '4px 10px', borderRadius: '99px', border: '1px solid #e2e8f0', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>🛡️ Required amenities</span>
+                </div>
+              </div>
+            ) : config.mapsApiKey ? (
               <GoogleMapComponent 
                 apiKey={config.mapsApiKey} 
                 recommendations={recommendations} 
