@@ -1,5 +1,6 @@
 import os
 import requests
+import math
 from typing import Dict, Any, List
 
 def get_maps_api_key() -> str:
@@ -89,5 +90,40 @@ def get_route_live(origin: str, destination: str, mode: str = "walking") -> Dict
                     "duration_value_seconds": elem["duration"]["value"]
                 }
     except Exception as e:
-        print(f"Distance Matrix error: {e}")
+        print(f"Distance Matrix API disabled or failed: {e}")
+        
+    # Math-based fallback calculation if Distance Matrix API is disabled on the GCP key
+    try:
+        orig_lat, orig_lng = map(float, origin.split(","))
+        dest_lat, dest_lng = map(float, destination.split(","))
+        
+        # 1 degree of latitude in Chicago is ~69.0 miles.
+        # 1 degree of longitude in Chicago is ~51.4 miles.
+        dy = 69.0 * (dest_lat - orig_lat)
+        dx = 51.4 * (dest_lng - orig_lng)
+        dist_miles = math.sqrt(dx*dx + dy*dy)
+        
+        # Avoid 0.0 values
+        dist_miles = max(0.1, dist_miles)
+        dist_text = f"{dist_miles:.1f} mi"
+        dist_meters = int(dist_miles * 1609.34)
+        
+        if mode == "walking":
+            # Walk pace: 20 mins per mile
+            duration_sec = max(60, int(dist_miles * 20 * 60))
+            duration_text = f"{max(1, int(dist_miles * 20))} mins"
+        else:
+            # Driving pace: 4 mins per mile in downtown traffic
+            duration_sec = max(60, int(dist_miles * 4 * 60))
+            duration_text = f"{max(1, int(dist_miles * 4))} mins"
+            
+        return {
+            "distance_text": dist_text,
+            "distance_value_meters": dist_meters,
+            "duration_text": duration_text,
+            "duration_value_seconds": duration_sec
+        }
+    except Exception as ex:
+        print(f"Math fallback routing computation failed: {ex}")
+        
     return {}
