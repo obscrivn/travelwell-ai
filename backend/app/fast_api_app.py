@@ -31,9 +31,23 @@ from app.app_utils.typing import Feedback
 
 load_dotenv()
 setup_telemetry()
-_, project_id = google.auth.default()
-logging_client = google_cloud_logging.Client()
-logger = logging_client.logger(__name__)
+logger = None
+project_id = None
+if os.getenv("DISABLE_TELEMETRY") != "true":
+    try:
+        _, project_id = google.auth.default()
+        logging_client = google_cloud_logging.Client()
+        logger = logging_client.logger(__name__)
+    except Exception as e:
+        import logging as py_logging
+        py_logging.warning(f"Could not initialize Google Cloud Logging client (using standard python logging): {e}")
+
+if logger is None:
+    import logging as py_logging
+    logger = py_logging.getLogger(__name__)
+    def log_struct_mock(info, severity="INFO"):
+        py_logging.info(f"[{severity}] {info}")
+    logger.log_struct = log_struct_mock
 allow_origins = (
     os.getenv("ALLOW_ORIGINS", "").split(",") if os.getenv("ALLOW_ORIGINS") else None
 )

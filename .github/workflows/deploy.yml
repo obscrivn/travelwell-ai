@@ -30,6 +30,9 @@ jobs:
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Install dependencies & run tests
+        env:
+          DISABLE_TELEMETRY: "true"
+          USE_MOCK_DATA: "true"
         run: |
           cd backend
           uv venv
