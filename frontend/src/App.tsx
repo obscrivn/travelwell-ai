@@ -382,6 +382,26 @@ function GoogleMapComponent({ apiKey, recommendations, selectedId, onSelectId, s
 }
 
 export default function App() {
+  // Runtime config loaded from /config.json
+  const [config, setConfig] = useState<{ apiBaseUrl: string; mapsApiKey: string }>({
+    apiBaseUrl: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000',
+    mapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''
+  });
+
+  React.useEffect(() => {
+    fetch('/config.json')
+      .then(res => res.json())
+      .then(data => {
+        setConfig({
+          apiBaseUrl: data.VITE_API_BASE_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000',
+          mapsApiKey: data.VITE_GOOGLE_MAPS_API_KEY || import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''
+        });
+      })
+      .catch(err => {
+        console.log("No runtime config.json found or failed to load. Using build env fallback.", err);
+      });
+  }, []);
+
   // Input fields
   const [location, setLocation] = useState("Downtown Chicago");
   const [budgetSelection, setBudgetSelection] = useState("20");
@@ -499,7 +519,7 @@ export default function App() {
           } else if (event.author === 'policy_validation') {
             setCurrentStageIndex(6);
           }
-        }, () => {});
+        }, () => {}, config.apiBaseUrl);
 
         const parsed = parseMarkdownToRecommendations(fullMarkdownText);
         if (parsed && parsed.length > 0) {
@@ -739,9 +759,9 @@ export default function App() {
         {/* Middle Card: Fake Map Panel */}
         <div className="white-card" style={{ padding: '12px', position: 'relative' }}>
           <div className="map-visual">
-            {import.meta.env.VITE_GOOGLE_MAPS_API_KEY ? (
+            {config.mapsApiKey ? (
               <GoogleMapComponent 
-                apiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY} 
+                apiKey={config.mapsApiKey} 
                 recommendations={recommendations} 
                 selectedId={selectedRecId} 
                 onSelectId={setSelectedRecId} 

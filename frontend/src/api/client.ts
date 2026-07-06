@@ -120,9 +120,10 @@ const BASE_RECS = {
 export async function runConciergeStream(
   params: RunParams,
   onEvent: (event: any) => void,
-  onTextUpdate: (text: string) => void
+  onTextUpdate: (text: string) => void,
+  apiBaseUrl?: string
 ): Promise<string> {
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+  const baseUrl = apiBaseUrl || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
   
   const userId = `user_${Math.random().toString(36).substring(2, 9)}`;
   const sessionId = `session_${Math.random().toString(36).substring(2, 9)}`;
