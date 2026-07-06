@@ -19,7 +19,7 @@ from collections.abc import AsyncIterator
 import google.auth
 from a2a.server.tasks import InMemoryTaskStore
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from google.adk.cli.fast_api import get_fast_api_app
 from google.adk.runners import Runner
 from google.cloud import logging as google_cloud_logging
@@ -110,6 +110,70 @@ def resolve_location(address: str) -> dict:
     """Resolves a landmark, neighborhood, venue or partial address using Geocoding."""
     from app.services.google_maps import geocode_address
     return geocode_address(address)
+
+
+@app.post("/api/recommend")
+async def recommend_workout(request: Request):
+    import json
+    from fastapi.responses import StreamingResponse
+    from google.genai import types
+    from google.adk.agents.run_config import RunConfig, StreamingMode
+    from app.app_utils import services
+    
+    body = await request.json()
+    
+    location = body.get("location", "Chicago")
+    time_window = body.get("timeWindow", "6:00 PM - 9:00 PM")
+    budget_sel = body.get("budgetSelection", "20")
+    has_ymca = body.get("hasYmca", False)
+    showers_req = body.get("showersReq", False)
+    parking_req = body.get("parkingReq", False)
+    pool_pref = body.get("poolPref", False)
+    treadmill_pref = body.get("treadmillPref", False)
+    
+    req_amenities = []
+    if showers_req: req_amenities.append("showers")
+    if parking_req: req_amenities.append("free parking")
+    
+    pref_amenities = []
+    if pool_pref: pref_amenities.append("indoor pool")
+    if treadmill_pref: pref_amenities.append("treadmill")
+    
+    membership_text = "I have a YMCA membership" if has_ymca else "I do not have any memberships"
+    budget_text = "no budget limit" if budget_sel == "none" else f"a budget of $0 (free only)" if budget_sel == "free" else f"a budget of ${budget_sel}"
+    
+    prompt = f"I am at {location}. I need to find a gym with {' and '.join(req_amenities) if req_amenities else 'workout access'} between {time_window}. {membership_text}, and {budget_text}. My preferred amenities are {', '.join(pref_amenities) if pref_amenities else 'none'}."
+    
+    runner = request.app.state.runner
+    user_id = f"user_{os.urandom(4).hex()}"
+    
+    session_service = services.get_session_service()
+    session = await session_service.create_session(user_id=user_id, app_name=request.app.state.agent_app_name)
+    
+    async def event_generator():
+        message = types.Content(role="user", parts=[types.Part.from_text(text=prompt)])
+        try:
+            events = runner.run(
+                new_message=message,
+                user_id=user_id,
+                session_id=session.id,
+                run_config=RunConfig(streaming_mode=StreamingMode.SSE)
+            )
+            for event in events:
+                event_dict = {
+                    "author": getattr(event, "author", "unknown"),
+                    "content": {
+                        "role": event.content.role if getattr(event, "content", None) else "model",
+                        "parts": [{"text": getattr(p, "text", "")} for p in event.content.parts] if getattr(event, "content", None) and getattr(event.content, "parts", None) else []
+                    } if getattr(event, "content", None) else None
+                }
+                yield f"data: {json.dumps(event_dict)}\n\n"
+        except Exception as e:
+            print(f"Agent execution stream error: {e}")
+            err_dict = {"author": "system_error", "content": {"role": "model", "parts": [{"text": f"Error: {e}"}]}}
+            yield f"data: {json.dumps(err_dict)}\n\n"
+            
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 # Main execution

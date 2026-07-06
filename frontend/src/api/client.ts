@@ -125,36 +125,20 @@ export async function runConciergeStream(
 ): Promise<string> {
   const baseUrl = apiBaseUrl || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
   
-  const userId = `user_${Math.random().toString(36).substring(2, 9)}`;
-  const sessionId = `session_${Math.random().toString(36).substring(2, 9)}`;
-  
-  const reqAmenities = [];
-  if (params.showersReq) reqAmenities.push("showers");
-  if (params.parkingReq) reqAmenities.push("free parking");
-  
-  const prefAmenities = [];
-  if (params.poolPref) prefAmenities.push("indoor pool");
-  if (params.treadmillPref) prefAmenities.push("treadmill");
-  
-  const membershipText = params.hasYmca ? "I have a YMCA membership" : "I do not have any memberships";
-  const budgetText = params.budgetSelection === "none" ? "no budget limit" : params.budgetSelection === "free" ? "a budget of $0 (free only)" : `a budget of $${params.budgetSelection}`;
-  
-  const prompt = `I am at ${params.location}. I need to find a gym with ${reqAmenities.join(" and ")} between ${params.timeWindow}. ${membershipText}, and ${budgetText}. My preferred amenities are ${prefAmenities.join(", ")}.`;
-
-  const response = await fetch(`${baseUrl}/run_sse`, {
+  const response = await fetch(`${baseUrl}/api/recommend`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      app_name: 'app',
-      user_id: userId,
-      session_id: sessionId,
-      new_message: {
-        role: 'user',
-        parts: [{ text: prompt }]
-      },
-      streaming: true
+      location: params.location,
+      timeWindow: params.timeWindow,
+      budgetSelection: params.budgetSelection,
+      hasYmca: params.hasYmca,
+      showersReq: params.showersReq,
+      parkingReq: params.parkingReq,
+      poolPref: params.poolPref,
+      treadmillPref: params.treadmillPref
     })
   });
 
