@@ -465,10 +465,22 @@ export default function App() {
     fetch('/config.json')
       .then(res => res.json())
       .then(data => {
-        setConfig({
-          apiBaseUrl: data.VITE_API_BASE_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000',
-          mapsApiKey: data.VITE_GOOGLE_MAPS_API_KEY || import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''
-        });
+        const apiBaseUrl = data.VITE_API_BASE_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        fetch(`${apiBaseUrl}/api/config`)
+          .then(res => res.json())
+          .then(configData => {
+            setConfig({
+              apiBaseUrl: apiBaseUrl,
+              mapsApiKey: configData.mapsApiKey || ''
+            });
+          })
+          .catch(err => {
+            console.log("Failed to fetch maps API key from backend. Using fallback.", err);
+            setConfig({
+              apiBaseUrl: apiBaseUrl,
+              mapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''
+            });
+          });
       })
       .catch(err => {
         console.log("No runtime config.json found or failed to load. Using build env fallback.", err);

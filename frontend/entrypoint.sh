@@ -3,8 +3,7 @@
 # Create the config.json file dynamically in the serving directory
 cat <<EOF > /usr/share/nginx/html/config.json
 {
-  "VITE_API_BASE_URL": "${VITE_API_BASE_URL:-}",
-  "VITE_GOOGLE_MAPS_API_KEY": "${VITE_GOOGLE_MAPS_API_KEY:-}"
+  "VITE_API_BASE_URL": "${VITE_API_BASE_URL:-}"
 }
 EOF
 
