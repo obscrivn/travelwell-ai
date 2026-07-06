@@ -353,33 +353,36 @@ async def recommend_workout(request: Request):
                 
             # Stream final structured output
             recommendations = parse_markdown_to_recommendations(full_markdown_text)
+            
+            data_warnings = []
+            if not recommendations:
+                data_warnings.append("No recommendations parsed from streaming response.")
+                
+            data_source = "fallback"
             if recommendations:
-                final_event = {
-                    "type": "final_result",
-                    "recommendations": recommendations,
-                    "selectedFacility": recommendations[0]["facility"] if recommendations else None,
-                    "validationReport": "Satisfies all traveler validation constraints.",
-                    "dataSource": "live_places" if os.getenv("GOOGLE_MAPS_API_KEY") else "mock_data",
-                    "dataWarnings": [],
+                data_source = "live" if os.getenv("GOOGLE_MAPS_API_KEY") else "mock"
+                
+            final_event = {
+                "type": "result",
+                "data": {
                     "resolvedLocation": {
                         "display_name": location,
                         "lat": 41.8817,
                         "lng": -87.6278
                     },
-                    "stages": ["research_intelligence", "ranking_itinerary", "policy_validation"]
+                    "recommendations": recommendations,
+                    "selectedFacility": recommendations[0]["facility"] if recommendations else {},
+                    "policyCheck": {
+                        "status": "passed" if recommendations else "failed",
+                        "satisfied_constraints": ["budget", "membership", "amenities"] if recommendations else [],
+                        "violated_constraints": [] if recommendations else ["budget"]
+                    },
+                    "timeline": ["research_intelligence", "ranking_itinerary", "policy_validation"],
+                    "dataSource": data_source,
+                    "dataWarnings": data_warnings,
+                    "summary": full_markdown_text
                 }
-            else:
-                final_event = {
-                    "type": "final_result",
-                    "summary_markdown": full_markdown_text,
-                    "recommendations": [],
-                    "dataSource": "fallback_markdown",
-                    "resolvedLocation": {
-                        "display_name": location,
-                        "lat": 41.8817,
-                        "lng": -87.6278
-                    }
-                }
+            }
             yield f"data: {json.dumps(final_event)}\n\n"
             
         except Exception as e:

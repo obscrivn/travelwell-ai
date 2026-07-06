@@ -8,7 +8,11 @@ inputs:
   - memberships
   - preferred_amenities
 outputs:
-  - facility_research_findings
+  - trip_profile
+  - resolved_location
+  - candidate_facilities
+  - data_source
+  - data_warnings
 tags:
   - research
   - discovery

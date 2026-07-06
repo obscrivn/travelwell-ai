@@ -629,16 +629,21 @@ export default function App() {
           } else if (event.author === 'policy_validation') {
             setCurrentStageIndex(6);
           }
-          if (event.type === 'final_result') {
-            if (event.recommendations && event.recommendations.length > 0) {
-              structuredRecs = event.recommendations;
-            } else if (event.summary_markdown) {
-              console.warn("Structured recommendations missing. Using markdown fallback.");
-              const parsed = parseMarkdownToRecommendations(event.summary_markdown);
+          if (event.type === 'result' && event.data) {
+            const data = event.data;
+            if (data.recommendations && data.recommendations.length > 0) {
+              structuredRecs = data.recommendations;
+            } else if (data.summary) {
+              console.warn("Structured recommendations empty inside final_result data. Using fallback summary markdown parse.");
+              const parsed = parseMarkdownToRecommendations(data.summary);
               if (parsed && parsed.length > 0) {
                 structuredRecs = parsed;
               }
-              setDataWarning("Structured JSON recommendations not returned from backend. Using parsed markdown fallback.");
+              setDataWarning("Structured JSON recommendations empty from backend. Using parsed markdown fallback.");
+            }
+          } else if (event.type === 'final_result') {
+            if (event.recommendations && event.recommendations.length > 0) {
+              structuredRecs = event.recommendations;
             }
           }
         }, () => {}, config.apiBaseUrl);

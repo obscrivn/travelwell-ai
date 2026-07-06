@@ -115,7 +115,7 @@ def test_recommend_endpoint_returns_structured_recommendation():
             
             final_result_line = None
             for line in body_content.split("\n"):
-                if "final_result" in line:
+                if '"type": "result"' in line:
                     final_result_line = line
                     break
             
@@ -123,9 +123,11 @@ def test_recommend_endpoint_returns_structured_recommendation():
             import json
             raw_data = json.loads(final_result_line.replace("data: ", "").strip())
             
-            assert raw_data["type"] == "final_result"
-            assert len(raw_data["recommendations"]) >= 1
-            rec = raw_data["recommendations"][0]
+            assert raw_data["type"] == "result"
+            assert "data" in raw_data
+            data = raw_data["data"]
+            assert len(data["recommendations"]) >= 1
+            rec = data["recommendations"][0]
             assert rec["facility"]["name"] == "Life Time Fitness"
             assert rec["facility"]["pricing"]["cost"] == 20.0
             assert rec["eligibility_status"] == "Fits Your Criteria"

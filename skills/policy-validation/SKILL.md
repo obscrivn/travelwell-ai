@@ -8,8 +8,12 @@ inputs:
   - itinerary
 outputs:
   - validated_recommendations
-  - validation_report
-  - recommendation_confidence
+  - policy_check
+  - satisfied_constraints
+  - violated_constraints
+  - unknown_constraints
+  - final_decision
+  - user_facing_summary
 tags:
   - validation
   - policy

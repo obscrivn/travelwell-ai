@@ -8,7 +8,9 @@ inputs:
   - travel_window
 outputs:
   - ranked_recommendations
-  - itinerary
+  - selected_facility
+  - visit_fit_summary
+  - ranking_rationale
 tags:
   - ranking
   - itinerary
