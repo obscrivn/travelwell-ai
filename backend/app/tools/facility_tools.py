@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 from app.services.mock_data import load_mock_data
 
 def search_places(location: str, budget: float) -> Dict[str, Any]:
@@ -121,67 +121,35 @@ def scrape_official_website(url: str) -> Dict[str, Any]:
         
     return {}
 
-def fetch_facility_details(facility_id: str, has_ymca: bool = False) -> Dict[str, Any]:
+def fetch_facility_details(facility_id: str, has_ymca: bool = False, memberships: Optional[List[str]] = None) -> Dict[str, Any]:
     """Retrieves access rules, day pass pricing, and verified details for a facility.
 
     Args:
         facility_id: The unique identifier for the facility.
         has_ymca: Whether the user has an active YMCA membership.
+        memberships: The active memberships owned by the user.
 
     Returns:
         A dictionary containing pricing structure and verification status.
     """
     from app.services.google_maps import get_maps_api_key, get_place_details_live
     key = get_maps_api_key()
+    from typing import List, Optional
+    memberships_set = {m.lower().strip() for m in (memberships or [])}
+    if has_ymca:
+        memberships_set.add("ymca")
     
     # Mock fallback lookup
+    is_mock_mode = False
+    mock_fac = None
     if facility_id.startswith("mock_") and "mccormick" not in facility_id.lower():
+        is_mock_mode = True
         data = load_mock_data()
         for scenario in data.get("scenarios", []):
             for fac in scenario.get("candidate_facilities_seed", []):
                 if fac.get("id") == facility_id:
-                    name = fac.get("name", "")
-                    is_ymca = "ymca" in name.lower()
-                    pricing = fac.get("pricing").copy()
-                    
-                    if is_ymca:
-                        if has_ymca:
-                            pricing["access_type"] = "membership_reciprocity"
-                            pricing["cost"] = 0.0
-                            pricing["pass_detail"] = "Free access via national YMCA membership reciprocity."
-                        else:
-                            pricing["access_type"] = "day_pass"
-                            pricing["cost"] = 25.0
-                            pricing["pass_detail"] = "estimated_guest_pass: $25 day pass without active membership."
-                    else:
-                        if pricing.get("access_type") == "membership_reciprocity":
-                            pricing["access_type"] = "day_pass"
-                            pricing["cost"] = 20.0
-                    
-                    return {
-                        "status": "success",
-                        "details": {
-                            "pricing": pricing,
-                            "source_metadata": fac.get("source_metadata") or {
-                                "provider": "mock_data",
-                                "verified": True,
-                                "phone": fac.get("phone", "Unknown Phone"),
-                                "website": fac.get("website", "https://maps.google.com"),
-                                "url": "https://maps.google.com",
-                                "formatted_address": fac.get("address", "Address unavailable"),
-                                "address_source": "mock_data",
-                                "phone_source": "mock_data",
-                                "hours_source": "mock_data",
-                                "amenities_source": "mock_data",
-                                "pricing_source": "mock_data",
-                                "address_confidence": "high",
-                                "phone_confidence": "high",
-                                "hours_confidence": "high",
-                                "amenities_confidence": "high",
-                                "pricing_confidence": "high"
-                            }
-                        }
-                    }
+                    mock_fac = fac
+                    break
 
     details = {}
     name = ""
@@ -189,6 +157,13 @@ def fetch_facility_details(facility_id: str, has_ymca: bool = False) -> Dict[str
     address = ""
     phone = ""
     maps_url = ""
+
+    if is_mock_mode and mock_fac:
+        name = mock_fac.get("name", "")
+        website = mock_fac.get("website", "https://maps.google.com")
+        address = mock_fac.get("address", "Address unavailable")
+        phone = mock_fac.get("phone", "Unknown Phone")
+        maps_url = mock_fac.get("website") or "https://maps.google.com"
     
     photo_url = ""
     photo_source = "placeholder"
@@ -278,32 +253,128 @@ def fetch_facility_details(facility_id: str, has_ymca: bool = False) -> Dict[str
         pricing_source = "official_site"
         pricing_confidence = "high"
         
-    is_ymca = "ymca" in final_name.lower()
-    pricing = {
-        "access_type": "unknown",
-        "cost": -1.0,
-        "pass_detail": "Pricing details not verified."
-    }
+    # Access and pricing verification logic
+    access_status = "unknown"
+    access_source = "google_places" if not scraped else "official_site"
+    pricing_source = "google_places" if not scraped else "official_site"
+    membership_evidence = "No membership information verified."
+    access_warnings = []
     
-    if is_ymca:
-        if has_ymca:
+    facility_name_lower = final_name.lower()
+    
+    # 1. YMCA logic
+    if "ymca" in facility_name_lower:
+        if "ymca" in memberships_set:
+            access_status = "verified_member_access"
             pricing = {
                 "access_type": "membership_reciprocity",
                 "cost": 0.0,
                 "pass_detail": "Free access via national YMCA membership reciprocity."
             }
+            membership_evidence = "Active YMCA membership reciprocity verified."
         else:
+            access_status = "verified_day_pass"
             pricing = {
                 "access_type": "day_pass",
                 "cost": 25.0,
-                "pass_detail": "estimated_guest_pass: $25 day pass without active membership."
+                "pass_detail": "YMCA guest pass: $25 without membership."
             }
+            membership_evidence = "Non-member. YMCA requires paid day pass."
+            
+    # 2. Planet Fitness logic
+    elif "planet fitness" in facility_name_lower:
+        if "planet fitness" in memberships_set:
+            access_status = "verified_member_access"
+            pricing = {
+                "access_type": "membership_reciprocity",
+                "cost": 0.0,
+                "pass_detail": "Free access via active Planet Fitness membership."
+            }
+            membership_evidence = "Active Planet Fitness membership verified."
+        else:
+            access_status = "membership_required"
+            pricing = {
+                "access_type": "unknown",
+                "cost": -1.0,
+                "pass_detail": "Planet Fitness membership required."
+            }
+            access_warnings.append("Planet Fitness does not reliably support non-member day passes without active membership.")
+            membership_evidence = "Non-member. Planet Fitness membership required."
+            
+    # 3. Life Time logic
+    elif "life time" in facility_name_lower or "lifetime" in facility_name_lower:
+        if "life time" in memberships_set or "lifetime" in memberships_set:
+            access_status = "verified_member_access"
+            pricing = {
+                "access_type": "membership_reciprocity",
+                "cost": 0.0,
+                "pass_detail": "Free access via active Life Time membership."
+            }
+            membership_evidence = "Active Life Time membership verified."
+        else:
+            access_status = "membership_required"
+            pricing = {
+                "access_type": "unknown",
+                "cost": -1.0,
+                "pass_detail": "Life Time membership required."
+            }
+            access_warnings.append("Life Time fitness requires active membership for club entry.")
+            membership_evidence = "Non-member. Life Time membership required."
+            
+    # 4. Equinox logic
+    elif "equinox" in facility_name_lower:
+        if "equinox" in memberships_set:
+            access_status = "verified_member_access"
+            pricing = {
+                "access_type": "membership_reciprocity",
+                "cost": 0.0,
+                "pass_detail": "Free access via active Equinox membership."
+            }
+            membership_evidence = "Active Equinox membership verified."
+        else:
+            access_status = "membership_required"
+            pricing = {
+                "access_type": "unknown",
+                "cost": -1.0,
+                "pass_detail": "Equinox membership required."
+            }
+            access_warnings.append("Equinox requires active membership for entry.")
+            membership_evidence = "Non-member. Equinox membership required."
+            
+    # 5. FFC, LA Fitness, Hotel Gym, etc.
+    elif any(brand in facility_name_lower for brand in ["ffc", "la fitness", "hotel gym"]):
+        matched_brand = next(brand for brand in ["ffc", "la fitness", "hotel gym"] if brand in facility_name_lower)
+        if matched_brand in memberships_set:
+            access_status = "verified_member_access"
+            pricing = {
+                "access_type": "membership_reciprocity",
+                "cost": 0.0,
+                "pass_detail": f"Free access via active {matched_brand.upper()} membership."
+            }
+            membership_evidence = f"Active {matched_brand.upper()} membership verified."
+        else:
+            access_status = "verified_day_pass"
+            pricing = {
+                "access_type": "day_pass",
+                "cost": 20.0,
+                "pass_detail": f"$20 Guest Day Pass"
+            }
+            membership_evidence = f"Non-member guest pass available."
+            
+    # 6. Other/General fallback
     else:
+        # Default day pass unknown
+        access_status = "unknown"
         pricing = {
-            "access_type": "day_pass",
-            "cost": 20.0,
-            "pass_detail": "$20 Day Pass"
+            "access_type": "unknown",
+            "cost": -1.0,
+            "pass_detail": "Pricing and guest pass availability unknown."
         }
+        access_warnings.append("Day pass availability is unknown for this private facility.")
+        membership_evidence = "Guest day pass availability unknown."
+
+    if pricing.get("cost") == 0.0 and pricing.get("access_type") != "membership_reciprocity":
+        access_status = "free_public_access"
 
     return {
         "status": "success",
@@ -334,7 +405,11 @@ def fetch_facility_details(facility_id: str, has_ymca: bool = False) -> Dict[str
                 "pricing_confidence": pricing_confidence,
                 "data_warnings": data_warnings,
                 "photo_url": photo_url,
-                "photo_source": photo_source
+                "photo_source": photo_source,
+                "access_status": access_status,
+                "access_source": access_source,
+                "membership_evidence": membership_evidence,
+                "access_warnings": access_warnings
             }
         }
     }

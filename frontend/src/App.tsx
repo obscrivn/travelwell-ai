@@ -593,6 +593,18 @@ export default function App() {
   const [location, setLocation] = useState("Downtown Chicago");
   const [budgetSelection, setBudgetSelection] = useState("20");
   const [hasYmca, setHasYmca] = useState(true);
+  const [freeTextPreferences, setFreeTextPreferences] = useState("");
+  const [selectedMemberships, setSelectedMemberships] = useState<string[]>(["YMCA"]);
+
+  const toggleMembership = (name: string) => {
+    setSelectedMemberships(prev => {
+      const next = prev.includes(name) ? prev.filter(m => m !== name) : [...prev, name];
+      if (name === "YMCA") {
+        setHasYmca(next.includes("YMCA"));
+      }
+      return next;
+    });
+  };
   const [timeWindow, setTimeWindow] = useState("6:00 PM - 9:00 PM");
   
   // Required
@@ -722,7 +734,9 @@ export default function App() {
           showersReq,
           parkingReq,
           poolPref,
-          treadmillPref
+          treadmillPref,
+          memberships: selectedMemberships,
+          freeTextPreferences: freeTextPreferences
         }, (event) => {
           if (event.author === 'research_intelligence') {
             setCurrentStageIndex(prev => Math.min(Math.max(prev, 1), 3));
@@ -824,6 +838,35 @@ export default function App() {
     if (rank === 1) return "🏆 Best Match";
     if (rank === 2) return "⭐ Premium Club";
     return "💰 Lowest Paid Pass";
+  };
+
+  const getAccessText = (rec: any) => {
+    const status = rec.access_status || rec.facility?.access_status;
+    const name = (rec.name || rec.facility?.name || "").toLowerCase();
+    
+    if (status === "verified_member_access") {
+      if (name.includes("ymca")) return "Access: Free with YMCA";
+      if (name.includes("planet fitness")) return "Access: Free with Planet Fitness";
+      if (name.includes("life time") || name.includes("lifetime")) return "Access: Free with Life Time";
+      if (name.includes("equinox")) return "Access: Free with Equinox";
+      if (name.includes("ffc")) return "Access: Free with FFC";
+      if (name.includes("la fitness")) return "Access: Free with LA Fitness";
+      if (name.includes("hotel gym")) return "Access: Free with Hotel Gym";
+      return "Access: Free with Membership";
+    } else if (status === "membership_required") {
+      if (name.includes("planet fitness")) return "Access: Planet Fitness membership required";
+      if (name.includes("life time") || name.includes("lifetime")) return "Access: Life Time membership required";
+      if (name.includes("equinox")) return "Access: Equinox membership required";
+      return "Access: Membership required";
+    } else if (status === "verified_day_pass") {
+      return "Access: Verified day pass";
+    } else if (status === "free_public_access") {
+      return "Access: Free public access";
+    } else if (status === "rejected") {
+      return "Access: Rejected (Ineligible)";
+    } else {
+      return "Access: Day pass unknown";
+    }
   };
 
   return (
@@ -954,7 +997,12 @@ export default function App() {
               <div className="pills-container">
                 <button
                   type="button"
-                  onClick={() => setHasYmca(true)}
+                  onClick={() => {
+                    setHasYmca(true);
+                    if (!selectedMemberships.includes("YMCA")) {
+                      setSelectedMemberships(prev => [...prev, "YMCA"]);
+                    }
+                  }}
                   className={`toggle-btn ${hasYmca ? 'active' : ''}`}
                 >
                   {hasYmca && <Check className="w-3.5 h-3.5" />}
@@ -962,13 +1010,56 @@ export default function App() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setHasYmca(false)}
+                  onClick={() => {
+                    setHasYmca(false);
+                    setSelectedMemberships(prev => prev.filter(m => m !== "YMCA"));
+                  }}
                   className={`toggle-btn ${!hasYmca ? 'active' : ''}`}
                 >
                   {!hasYmca && <Check className="w-3.5 h-3.5" />}
                   No YMCA
                 </button>
               </div>
+            </div>
+
+            <div className="form-group">
+              <label>ACTIVE MEMBERSHIPS</label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                {["YMCA", "Planet Fitness", "Life Time", "FFC", "LA Fitness", "Equinox", "Hotel Gym", "Other"].map((m) => {
+                  const isActive = selectedMemberships.includes(m);
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => toggleMembership(m)}
+                      className={`toggle-btn ${isActive ? 'active' : ''}`}
+                      style={{ padding: '4px 10px', fontSize: '0.75rem', borderRadius: '99px' }}
+                    >
+                      {isActive && <Check className="w-3.5 h-3.5" />}
+                      {m}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label>ADDITIONAL PREFERENCES</label>
+              <textarea
+                value={freeTextPreferences}
+                onChange={(e) => setFreeTextPreferences(e.target.value)}
+                placeholder="Tell TravelWell anything else: Planet Fitness Black Card, hotel gym access, lap swim only, women-only gym, sauna, open after 8 PM..."
+                style={{
+                  width: '100%',
+                  minHeight: '60px',
+                  borderRadius: '6px',
+                  border: '1px solid #cbd5e1',
+                  padding: '8px',
+                  fontSize: '0.8rem',
+                  fontFamily: 'inherit',
+                  resize: 'vertical'
+                }}
+              />
             </div>
 
             {/* Required Preferences */}
@@ -1348,6 +1439,9 @@ export default function App() {
                       </h3>
                       <div className="card-address" style={{ fontSize: '0.75rem', color: '#64748b' }}>
                         {rec.address}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', fontWeight: 700, margin: '4px 0', color: rec.access_status === "verified_member_access" || rec.access_status === "free_public_access" ? "#10b981" : rec.access_status === "membership_required" || rec.access_status === "rejected" ? "#ef4444" : "#f59e0b" }}>
+                        🔑 {getAccessText(rec)}
                       </div>
                     </div>
 

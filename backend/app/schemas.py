@@ -13,6 +13,8 @@ class TripProfile(BaseModel):
     memberships: List[str]
     preferences: List[str]
     required_amenities: List[str]
+    access_preferences: Optional[List[str]] = Field(default_factory=list)
+    free_text_preferences: Optional[str] = None
 
 class Pricing(BaseModel):
     access_type: str

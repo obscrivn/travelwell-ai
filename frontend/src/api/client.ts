@@ -9,6 +9,8 @@ export interface RunParams {
   parkingReq: boolean;
   poolPref: boolean;
   treadmillPref: boolean;
+  memberships: string[];
+  freeTextPreferences: string;
 }
 
 // Baseline mock templates to enrich LLM response
@@ -138,7 +140,9 @@ export async function runConciergeStream(
       showersReq: params.showersReq,
       parkingReq: params.parkingReq,
       poolPref: params.poolPref,
-      treadmillPref: params.treadmillPref
+      treadmillPref: params.treadmillPref,
+      memberships: params.memberships,
+      freeTextPreferences: params.freeTextPreferences
     })
   });
 

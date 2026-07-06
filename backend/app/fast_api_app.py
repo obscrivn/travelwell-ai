@@ -142,7 +142,7 @@ def resolve_location(address: str) -> dict:
     return geocode_address(address)
 
 
-def parse_markdown_to_recommendations(markdown: str, budget_sel: str = "20", has_ymca: bool = False) -> list:
+def parse_markdown_to_recommendations(markdown: str, budget_sel: str = "20", has_ymca: bool = False, memberships: list = None) -> list:
     import re
     cards = re.split(r'### Recommendation Card:', markdown, flags=re.IGNORECASE)
     recommendations = []
@@ -346,9 +346,15 @@ def parse_markdown_to_recommendations(markdown: str, budget_sel: str = "20", has
         enrich_id = parsed_place_id or facility_id
         photo_url = ""
         photo_source = "placeholder"
-        if enrich_id and not enrich_id.startswith("mock_"):
+        access_status = "unknown"
+        access_source = "google_places"
+        pricing_source = "google_places"
+        membership_evidence = "No membership evidence verified."
+        access_warnings = []
+        
+        if enrich_id:
             try:
-                res = fetch_facility_details(enrich_id, has_ymca=has_ymca)
+                res = fetch_facility_details(enrich_id, has_ymca=has_ymca, memberships=memberships)
                 if res.get("status") == "success":
                     meta = res["details"].get("source_metadata", {})
                     if meta.get("formatted_address") and meta["formatted_address"] != "Address unavailable":
@@ -369,6 +375,16 @@ def parse_markdown_to_recommendations(markdown: str, budget_sel: str = "20", has
                     if meta.get("facility_hours") and meta["facility_hours"] not in ["Hours unknown", "Hours unavailable"]:
                         resolved_facility_hours = meta["facility_hours"]
                         resolved_hours_summary = meta["facility_hours"]
+                    if meta.get("access_status"):
+                        access_status = meta["access_status"]
+                    if meta.get("access_source"):
+                        access_source = meta["access_source"]
+                    if meta.get("pricing_source"):
+                        pricing_source = meta["pricing_source"]
+                    if meta.get("membership_evidence"):
+                        membership_evidence = meta["membership_evidence"]
+                    if meta.get("access_warnings"):
+                        access_warnings = meta["access_warnings"]
             except Exception as e:
                 print(f"Error enriching recommendation card details: {e}")
 
@@ -419,6 +435,11 @@ def parse_markdown_to_recommendations(markdown: str, budget_sel: str = "20", has
             "effective_price": effective_price,
             "pricing_status": pricing_status,
             "access_type": access_type,
+            "access_status": access_status,
+            "access_source": access_source,
+            "pricing_source": pricing_source,
+            "membership_evidence": membership_evidence,
+            "access_warnings": access_warnings,
             "is_open_now": False if "closed" in resolved_hours_summary.lower() else True,
             "opening_hours_summary": resolved_hours_summary,
             "validation_status": "passed" if clean_eligibility == "Fits Your Criteria" else "warning" if clean_eligibility == "Alternative" else "failed",
@@ -491,10 +512,19 @@ async def recommend_workout(request: Request):
         if pool_pref: pref_amenities.append("indoor pool")
         if treadmill_pref: pref_amenities.append("treadmill")
         
-        membership_text = "I have a YMCA membership" if has_ymca else "I do not have any memberships"
+        memberships = body.get("memberships", [])
+        if has_ymca and "YMCA" not in memberships:
+            memberships.append("YMCA")
+        free_text_preferences = body.get("freeTextPreferences", "")
+
+        membership_text = f"I have the following memberships: {', '.join(memberships)}" if memberships else "I do not have any memberships"
         budget_text = "no budget limit" if budget_sel == "none" else f"a budget of $0 (free only)" if budget_sel == "free" else f"a budget of ${budget_sel}"
         
-        prompt = f"I am at {location}. I need to find a gym with {' and '.join(req_amenities) if req_amenities else 'workout access'} between {time_window}. {membership_text}, and {budget_text}. My preferred amenities are {', '.join(pref_amenities) if pref_amenities else 'none'}."
+        pref_desc = f"My preferred amenities are: {', '.join(pref_amenities)}" if pref_amenities else "No preferred amenities"
+        if free_text_preferences:
+            pref_desc += f". Additional preferences and details: {free_text_preferences}"
+            
+        prompt = f"I am at {location}. I need to find a gym with {' and '.join(req_amenities) if req_amenities else 'workout access'} between {time_window}. {membership_text}, and {budget_text}. {pref_desc}."
         
         runner = request.app.state.runner
         user_id = f"user_{os.urandom(4).hex()}"
@@ -543,7 +573,7 @@ async def recommend_workout(request: Request):
                 yield f"data: {json.dumps(event_dict)}\n\n"
                 
             # Stream final structured output
-            recommendations = parse_markdown_to_recommendations(full_markdown_text, budget_sel=budget_sel, has_ymca=has_ymca)
+            recommendations = parse_markdown_to_recommendations(full_markdown_text, budget_sel=budget_sel, has_ymca=has_ymca, memberships=memberships)
             
             data_warnings = []
             if not recommendations:
@@ -564,9 +594,18 @@ async def recommend_workout(request: Request):
                     "recommendations": recommendations,
                     "selectedFacility": recommendations[0]["facility"] if recommendations else {},
                     "policyCheck": {
-                        "status": "passed" if recommendations else "failed",
-                        "satisfied_constraints": ["budget", "membership", "amenities"] if recommendations else [],
-                        "violated_constraints": [] if recommendations else ["budget"]
+                        "status": "passed" if (recommendations and recommendations[0].get("eligibility_status") == "Fits Your Criteria") else "failed",
+                        "satisfied_constraints": [
+                            c for c in ["budget", "membership", "amenities"]
+                            if (c == "membership" and (not recommendations or recommendations[0].get("access_status") not in ["membership_required", "rejected"]))
+                            and (c == "budget" and (not recommendations or recommendations[0].get("eligibility_status") != "Rejected"))
+                        ] if recommendations else [],
+                        "violated_constraints": (
+                            ([c for c in ["membership", "budget"]
+                              if (c == "membership" and recommendations[0].get("access_status") in ["membership_required", "rejected"])
+                              or (c == "budget" and recommendations[0].get("eligibility_status") == "Rejected")]
+                            ) if recommendations else ["budget"]
+                        )
                     },
                     "timeline": ["research_intelligence", "ranking_itinerary", "policy_validation"],
                     "dataSource": data_source,
