@@ -118,4 +118,4 @@ jobs:
           image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REGISTRY_REPO }}/frontend:${{ github.sha }}
           region: ${{ env.REGION }}
           env_vars: |
-            VITE_API_BASE_URL=https://travelwell-backend-msbiisna6q-uc.a.run.app
+            VITE_API_BASE_URL=https://travelwell-backend-163831374566.us-central1.run.app

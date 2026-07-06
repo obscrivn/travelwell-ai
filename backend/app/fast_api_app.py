@@ -48,9 +48,14 @@ if logger is None:
     def log_struct_mock(info, severity="INFO"):
         py_logging.info(f"[{severity}] {info}")
     logger.log_struct = log_struct_mock
-allow_origins = (
-    os.getenv("ALLOW_ORIGINS", "").split(",") if os.getenv("ALLOW_ORIGINS") else None
-)
+allow_origins = [
+    "http://localhost:5173",
+    "https://travelwell-frontend-163831374566.us-central1.run.app",
+    "https://travelwell-frontend-msbiisna6q-uc.a.run.app",
+    "http://localhost:8000"
+]
+if os.getenv("ALLOW_ORIGINS"):
+    allow_origins.extend(os.getenv("ALLOW_ORIGINS", "").split(","))
 
 AGENT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
