@@ -143,15 +143,19 @@ export async function runConciergeStream(
   });
 
   if (!response.ok) {
+    let errMessage = '';
     try {
       const errJson = await response.json();
       if (errJson && errJson.message) {
-        throw new Error(`Concierge backend error in [${errJson.stage}]: ${errJson.message}`);
+        errMessage = `Concierge backend error in [${errJson.stage}]: ${errJson.message}`;
       }
     } catch (e) {
       // not JSON
     }
-    throw new Error(`Concierge backend error: ${response.statusText}`);
+    if (errMessage) {
+      throw new Error(errMessage);
+    }
+    throw new Error(`Concierge backend error: ${response.statusText || 'Internal Server Error'}`);
   }
 
   const reader = response.body?.getReader();
