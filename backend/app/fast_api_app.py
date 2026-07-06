@@ -281,7 +281,7 @@ def parse_markdown_to_recommendations(markdown: str, budget_sel: str = "20", has
         facility = {
             "id": facility_id,
             "name": facility_name,
-            "address": parsed_address or "Unknown Address",
+            "address": parsed_address or "Address unavailable",
             "phone": parsed_phone or "Unknown Phone",
             "website": parsed_website or parsed_maps_url or "Unknown Website",
             "rating": 4.5,
@@ -321,7 +321,7 @@ def parse_markdown_to_recommendations(markdown: str, budget_sel: str = "20", has
             "id": facility_id,
             "place_id": parsed_place_id or f"place_{rank}",
             "name": facility_name,
-            "address": parsed_address or "Unknown Address",
+            "address": parsed_address or "Address unavailable",
             "coordinates": parsed_coords or {"lat": 41.8817, "lng": -87.6278},
             "rating": 4.5,
             "user_ratings_total": 120,

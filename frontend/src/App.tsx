@@ -60,6 +60,22 @@ export interface Recommendation {
   eligibility_status: 'Fits Your Criteria' | 'Alternative' | 'Rejected';
   card_summary: string;
   badge_subtitle: string;
+  
+  // Canonical source of truth fields
+  id?: string;
+  place_id?: string;
+  name?: string;
+  address?: string;
+  coordinates?: { lat: number; lng: number };
+  rating?: number;
+  walk_minutes?: number;
+  drive_minutes?: number;
+  effective_price?: number | null;
+  access_type?: string;
+  amenities?: string[];
+  google_maps_url?: string;
+  phone_number?: string;
+  website?: string;
 }
 
 interface ErrorBoundaryProps {
@@ -431,52 +447,63 @@ function GoogleMapComponent({ apiKey, recommendations, selectedId, onSelectId, s
 
     if (showResults) {
       recommendations.forEach(rec => {
-        const coords = rec.facility.coordinates || { lat: 41.8817, lng: -87.6278 };
-        const isSelected = rec.facility.id === selectedId;
+        const coords = rec.coordinates || rec.facility?.coordinates || { lat: 41.8817, lng: -87.6278 };
+        const recId = rec.id || rec.facility?.id;
+        const isSelected = recId === selectedId;
         bounds.extend(coords);
 
         const marker = new window.google.maps.Marker({
           position: coords,
           map: mapInstanceRef.current,
-          title: rec.facility?.name,
+          title: rec.name,
           icon: isSelected 
             ? "http://maps.google.com/mapfiles/ms/icons/blue-dot.png" 
             : "http://maps.google.com/mapfiles/ms/icons/green-dot.png"
         });
 
-        const ratingVal = rec.facility?.rating || 4.5;
-        const walkTimeVal = rec.facility?.distance?.walking_time_minutes || 15;
-        const driveTimeVal = rec.facility?.distance?.transit_time_minutes || 4;
+        const ratingVal = rec.rating || 4.5;
+        const walkTimeVal = rec.walk_minutes || 15;
+        const driveTimeVal = rec.drive_minutes || 4;
         
         let priceLabel = "Price unknown";
-        if (rec.facility?.pricing?.cost === 0) {
-          priceLabel = rec.facility?.pricing?.access_type === 'membership_reciprocity' 
+        if (rec.effective_price === 0) {
+          priceLabel = rec.access_type === 'membership_reciprocity' 
             ? "Free with YMCA Reciprocity" 
             : "Free";
-        } else if (rec.facility?.pricing?.cost !== null && rec.facility?.pricing?.cost !== undefined) {
-          priceLabel = `$${rec.facility.pricing.cost} Day Pass`;
+        } else if (rec.effective_price !== null && rec.effective_price !== undefined) {
+          priceLabel = `$${rec.effective_price} Day Pass`;
         }
         
-        const poolBadge = rec.facility?.amenities?.includes('pool') || rec.facility?.emoji_badges?.some(b => b.toLowerCase().includes('pool')) ? "🏊 Pool" : "";
-        const showerBadge = rec.facility?.amenities?.includes('showers') || rec.facility?.emoji_badges?.some(b => b.toLowerCase().includes('shower')) ? "🚿 Showers" : "";
+        // Find Pool/Showers from amenities or badges
+        const poolBadge = rec.amenities?.includes('pool') || rec.facility?.amenities?.includes('pool') || rec.facility?.emoji_badges?.some((b: string) => b.toLowerCase().includes('pool')) ? "🏊 Pool" : "";
+        const showerBadge = rec.amenities?.includes('showers') || rec.facility?.amenities?.includes('showers') || rec.facility?.emoji_badges?.some((b: string) => b.toLowerCase().includes('shower')) ? "🚿 Showers" : "";
         const popupAmenities = [poolBadge, showerBadge].filter(Boolean).join(" • ");
         
         const closeHours = rec.facility?.hours?.close || "10 PM";
-        const websiteLink = rec.facility?.website || "https://maps.google.com";
+        
+        // Construct Google Maps URL following rules
+        let mapsUrl = rec.google_maps_url;
+        if (!mapsUrl || mapsUrl === "https://maps.google.com" || !mapsUrl.startsWith("http")) {
+          if (rec.place_id && rec.place_id.startsWith("ChI")) {
+            mapsUrl = `https://www.google.com/maps/search/?api=1&query=Google&query_place_id=${rec.place_id}`;
+          } else {
+            mapsUrl = `https://www.google.com/maps/search/?api=1&query=${coords.lat},${coords.lng}`;
+          }
+        }
 
         const contentString = `
           <div style="font-family: system-ui, -apple-system, sans-serif; color: #1e293b; padding: 6px; min-width: 180px; line-height: 1.45;">
-            <div style="font-weight: 800; font-size: 0.85rem; margin-bottom: 2px; color: #0f172a;">${rec.facility?.name}</div>
+            <div style="font-weight: 800; font-size: 0.85rem; margin-bottom: 2px; color: #0f172a;" class="map-popup-title">${rec.name}</div>
             <div style="font-size: 0.7rem; color: #64748b; margin-bottom: 4px; display: flex; gap: 4px; align-items: center; font-weight: 500;">
               <span>⭐ ${ratingVal}</span>
               <span>• 🚶 ${walkTimeVal} min</span>
               <span>• 🚗 ${driveTimeVal} min</span>
             </div>
-            <div style="font-size: 0.72rem; font-weight: 700; color: #1e3a8a; margin-bottom: 4px;">💰 ${priceLabel}</div>
+            <div style="font-size: 0.72rem; font-weight: 700; color: #1e3a8a; margin-bottom: 4px;" class="map-popup-price">💰 ${priceLabel}</div>
             ${popupAmenities ? `<div style="font-size: 0.68rem; color: #475569; margin-bottom: 4px; font-weight: 500;">${popupAmenities}</div>` : ""}
             <div style="font-size: 0.68rem; color: #059669; font-weight: 600; margin-bottom: 4px;">Open until ${closeHours}</div>
             <div style="margin-top: 4px; border-top: 1px solid #e2e8f0; padding-top: 4px;">
-              <a href="${websiteLink}" target="_blank" rel="noopener noreferrer" style="color: #2563eb; text-decoration: none; font-weight: bold; font-size: 0.68rem; display: inline-block;">Open in Maps →</a>
+              <a href="${mapsUrl}" target="_blank" rel="noopener noreferrer" class="map-popup-link" style="color: #2563eb; text-decoration: none; font-weight: bold; font-size: 0.68rem; display: inline-block;">Open in Maps →</a>
             </div>
           </div>
         `;
@@ -1283,11 +1310,11 @@ export default function App() {
 
                     {/* Facility Name Block */}
                     <div>
-                      <h3 style={{ fontSize: '0.95rem', fontWeight: 800, margin: '4px 0', color: '#0f172a' }}>
-                        {rec.facility.name}
+                      <h3 className="card-title" style={{ fontSize: '0.95rem', fontWeight: 800, margin: '4px 0', color: '#0f172a' }}>
+                        {rec.name}
                       </h3>
-                      <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                        {rec.facility.address}
+                      <div className="card-address" style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                        {rec.address}
                       </div>
                     </div>
 
@@ -1295,16 +1322,16 @@ export default function App() {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px', padding: '6px 0', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }}>
                       <div style={{ textAlign: 'center' }}>
                         <div style={{ fontSize: '0.58rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Rating</div>
-                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155' }}>⭐ {rec.facility.rating}</div>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155' }}>⭐ {rec.rating}</div>
                       </div>
                       <div style={{ textAlign: 'center' }}>
                         <div style={{ fontSize: '0.58rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Travel</div>
-                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155' }}>🚶 {rec.facility.distance.walking_time_minutes}m</div>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155' }}>🚶 {rec.walk_minutes}m</div>
                       </div>
                       <div style={{ textAlign: 'center' }}>
                         <div style={{ fontSize: '0.58rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Day Pass</div>
-                        <div style={{ fontSize: '0.75rem', fontWeight: 800, color: rec.facility.pricing.cost === 0 ? '#10b981' : '#334155' }}>
-                          {rec.facility.pricing.cost === 0 ? "FREE Reciprocity" : rec.facility.pricing.cost === null ? "Pricing Unknown" : `$${rec.facility.pricing.cost}`}
+                        <div className="card-price" style={{ fontSize: '0.75rem', fontWeight: 800, color: rec.effective_price === 0 ? '#10b981' : '#334155' }}>
+                          {rec.effective_price === 0 ? "FREE Reciprocity" : (rec.effective_price === null || rec.effective_price === undefined) ? "Pricing Unknown" : `$${rec.effective_price}`}
                         </div>
                       </div>
                     </div>
@@ -1342,7 +1369,7 @@ export default function App() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', paddingBottom: '8px', borderBottom: '1px solid #e2e8f0' }}>
             <span style={{ fontSize: '1.2rem' }}>{selectedRec.rank === 1 ? "🏆" : selectedRec.rank === 2 ? "🥈" : "💰"}</span>
             <h2 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0, color: '#0f172a' }}>
-              Selected Facility: {selectedRec.facility.name}
+              Selected Facility: {selectedRec.name}
             </h2>
           </div>
 
@@ -1357,21 +1384,21 @@ export default function App() {
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                  <div className={`satisfied-chip ${selectedRec.facility.amenities.includes('pool') ? 'yes' : 'no'}`}>
-                    <span>{selectedRec.facility.amenities.includes('pool') ? '✅' : '❌'}</span>
+                  <div className={`satisfied-chip ${(selectedRec.amenities?.includes('pool') || selectedRec.facility?.amenities?.includes('pool')) ? 'yes' : 'no'}`}>
+                    <span>{(selectedRec.amenities?.includes('pool') || selectedRec.facility?.amenities?.includes('pool')) ? '✅' : '❌'}</span>
                     <span>Indoor pool</span>
                   </div>
-                  <div className={`satisfied-chip ${selectedRec.facility.amenities.includes('treadmill') ? 'yes' : 'no'}`}>
-                    <span>{selectedRec.facility.amenities.includes('treadmill') ? '✅' : '❌'}</span>
+                  <div className={`satisfied-chip ${(selectedRec.amenities?.includes('treadmill') || selectedRec.facility?.amenities?.includes('treadmill')) ? 'yes' : 'no'}`}>
+                    <span>{(selectedRec.amenities?.includes('treadmill') || selectedRec.facility?.amenities?.includes('treadmill')) ? '✅' : '❌'}</span>
                     <span>Treadmill</span>
                   </div>
-                  <div className={`satisfied-chip ${selectedRec.facility.amenities.includes('showers') ? 'yes' : 'no'}`}>
-                    <span>{selectedRec.facility.amenities.includes('showers') ? '✅' : '❌'}</span>
+                  <div className={`satisfied-chip ${(selectedRec.amenities?.includes('showers') || selectedRec.facility?.amenities?.includes('showers')) ? 'yes' : 'no'}`}>
+                    <span>{(selectedRec.amenities?.includes('showers') || selectedRec.facility?.amenities?.includes('showers')) ? '✅' : '❌'}</span>
                     <span>Showers</span>
                   </div>
-                  <div className={`satisfied-chip ${selectedRec.facility.amenities.includes('parking') ? 'yes' : 'no'}`}>
-                    <span>{selectedRec.facility.amenities.includes('parking') ? '✅' : '❌'}</span>
-                    <span>Free parking {!selectedRec.facility.amenities.includes('parking') && "(not identified in facility data)"}</span>
+                  <div className={`satisfied-chip ${(selectedRec.amenities?.includes('parking') || selectedRec.facility?.amenities?.includes('parking')) ? 'yes' : 'no'}`}>
+                    <span>{(selectedRec.amenities?.includes('parking') || selectedRec.facility?.amenities?.includes('parking')) ? '✅' : '❌'}</span>
+                    <span>Free parking {!(selectedRec.amenities?.includes('parking') || selectedRec.facility?.amenities?.includes('parking')) && "(not identified in facility data)"}</span>
                   </div>
                 </div>
               </div>
@@ -1386,20 +1413,33 @@ export default function App() {
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                   <div className="info-btn" style={{ cursor: 'default' }}>
                     <MapPin className="w-3.5 h-3.5 text-slate-500" />
-                    <span>{selectedRec.facility.address}</span>
+                    <span className="detail-address">{selectedRec.address || "Address unavailable"}</span>
                   </div>
-                  <a href={`tel:${selectedRec.facility.phone}`} className="info-btn">
+                  <a href={`tel:${selectedRec.phone_number || selectedRec.facility?.phone}`} className="info-btn">
                     <Phone className="w-3.5 h-3.5" />
-                    <span>Call ({selectedRec.facility.phone})</span>
+                    <span>Call ({selectedRec.phone_number || selectedRec.facility?.phone || "Unknown Phone"})</span>
                   </a>
-                  <a href={selectedRec.facility.website} target="_blank" rel="noreferrer" className="info-btn">
+                  <a href={selectedRec.website || selectedRec.facility?.website} target="_blank" rel="noreferrer" className="info-btn">
                     <ExternalLink className="w-3.5 h-3.5" />
                     <span>Website</span>
                   </a>
-                  <button className="info-btn" onClick={() => alert(`Navigating to ${selectedRec.facility.name}`)}>
-                    <Compass className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Open in Maps</span>
-                  </button>
+                  {(() => {
+                    let mapsUrl = selectedRec.google_maps_url;
+                    if (!mapsUrl || mapsUrl === "https://maps.google.com" || !mapsUrl.startsWith("http")) {
+                      const coords = selectedRec.coordinates || selectedRec.facility?.coordinates || { lat: 41.8817, lng: -87.6278 };
+                      if (selectedRec.place_id && selectedRec.place_id.startsWith("ChI")) {
+                        mapsUrl = `https://www.google.com/maps/search/?api=1&query=Google&query_place_id=${selectedRec.place_id}`;
+                      } else {
+                        mapsUrl = `https://www.google.com/maps/search/?api=1&query=${coords.lat},${coords.lng}`;
+                      }
+                    }
+                    return (
+                      <a href={mapsUrl} target="_blank" rel="noreferrer" className="info-btn detail-open-maps-link">
+                        <Compass className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Open in Maps</span>
+                      </a>
+                    );
+                  })()}
                 </div>
               </div>
             </div>

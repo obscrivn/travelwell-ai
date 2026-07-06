@@ -184,6 +184,6 @@ This is an introductory narrative repeating "I understand your requirements at H
     recs_minimal = parse_markdown_to_recommendations(markdown_minimal, budget_sel="none", has_ymca=False)
     assert len(recs_minimal) == 1
     # Verify address defaults to "Unknown Address", coords default to Chicago loop, phone defaults to "Unknown Phone"
-    assert recs_minimal[0]["facility"]["address"] == "Unknown Address"
+    assert recs_minimal[0]["facility"]["address"] == "Address unavailable"
     assert recs_minimal[0]["facility"]["phone"] == "Unknown Phone"
     assert recs_minimal[0]["facility"]["coordinates"] == {"lat": 41.8817, "lng": -87.6278}
