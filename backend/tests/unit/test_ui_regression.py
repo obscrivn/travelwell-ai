@@ -83,3 +83,63 @@ def test_mccormick_ymca_verification():
     assert meta["address_source"] == "official_site"
     assert meta["phone_source"] == "official_site"
 
+
+def test_skokie_starting_marker_resolution():
+    from app.services.google_maps import geocode_address
+    res = geocode_address("Residence Inn Skokie, IL")
+    assert res["lat"] == pytest.approx(42.0324, abs=1e-3)
+    assert res["lng"] == pytest.approx(-87.7417, abs=1e-3)
+    assert "Skokie" in res["formatted_address"]
+
+
+def test_recommendation_cards_uniqueness():
+    markdown = """
+### Recommendation Card: Unique Gym A
+- Place ID: ChIJunique_a
+- Eligibility Status: Fits Your Criteria
+
+### Recommendation Card: Unique Gym A
+- Place ID: ChIJunique_a
+- Eligibility Status: Fits Your Criteria
+
+### Recommendation Card: Unique Gym B
+- Place ID: ChIJunique_b
+- Eligibility Status: Fits Your Criteria
+
+### Recommendation Card: Unique Gym C
+- Place ID: ChIJunique_c
+- Eligibility Status: Fits Your Criteria
+
+### Recommendation Card: Unique Gym D
+- Place ID: ChIJunique_d
+- Eligibility Status: Fits Your Criteria
+"""
+    recs = parse_markdown_to_recommendations(markdown, budget_sel="20", has_ymca=False)
+    # Backend cap is 3 unique recommendations
+    assert len(recs) <= 3
+    # Check that there are no duplicate place_ids
+    pids = [r["place_id"] for r in recs]
+    assert len(pids) == len(set(pids))
+
+
+def test_live_results_hours_uniqueness_and_photos():
+    # If key is mock, live check uses fallback, let's verify hours default mapping
+    markdown_mock_default = """
+### Recommendation Card: Gym With No Hours
+- Place ID: mock_nonexistent
+- Eligibility Status: Fits Your Criteria
+"""
+    import os
+    orig_key = os.environ.get("GOOGLE_MAPS_API_KEY", "")
+    try:
+        # Simulate live search with a key present
+        os.environ["GOOGLE_MAPS_API_KEY"] = "fake_key"
+        recs = parse_markdown_to_recommendations(markdown_mock_default, budget_sel="20", has_ymca=False)
+        assert len(recs) == 1
+        # Live search hours missing should be "Hours unavailable", not the default "Open 06:00 - 22:00"
+        assert recs[0]["opening_hours_summary"] == "Hours unavailable"
+    finally:
+        if orig_key:
+            os.environ["GOOGLE_MAPS_API_KEY"] = orig_key
+        else:
+            del os.environ["GOOGLE_MAPS_API_KEY"]

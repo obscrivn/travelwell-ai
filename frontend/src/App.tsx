@@ -77,6 +77,11 @@ export interface Recommendation {
   phone_number?: string;
   website?: string;
   official_website_url?: string;
+  photo_url?: string;
+  photo_source?: string;
+  opening_hours_summary?: string;
+  is_open_now?: boolean;
+  pool_hours?: string;
 }
 
 interface ErrorBoundaryProps {
@@ -375,9 +380,10 @@ interface GoogleMapProps {
   selectedId: string;
   onSelectId: (id: string) => void;
   showResults: boolean;
+  resolvedLocation: { lat?: number; lng?: number; display_name?: string } | null;
 }
 
-function GoogleMapComponent({ apiKey, recommendations, selectedId, onSelectId, showResults }: GoogleMapProps) {
+function GoogleMapComponent({ apiKey, recommendations, selectedId, onSelectId, showResults, resolvedLocation }: GoogleMapProps) {
   const mapRef = React.useRef<HTMLDivElement>(null);
   const mapInstanceRef = React.useRef<any>(null);
   const markersRef = React.useRef<any[]>([]);
@@ -422,7 +428,9 @@ function GoogleMapComponent({ apiKey, recommendations, selectedId, onSelectId, s
     markersRef.current = [];
 
     const bounds = new window.google.maps.LatLngBounds();
-    const hotelPos = { lat: 41.8817, lng: -87.6278 };
+    const hotelPos = resolvedLocation && resolvedLocation.lat && resolvedLocation.lng
+      ? { lat: resolvedLocation.lat, lng: resolvedLocation.lng }
+      : { lat: 41.8817, lng: -87.6278 };
     bounds.extend(hotelPos);
 
     const hotelMarker = new window.google.maps.Marker({
@@ -480,7 +488,7 @@ function GoogleMapComponent({ apiKey, recommendations, selectedId, onSelectId, s
         const showerBadge = rec.amenities?.includes('showers') || rec.facility?.amenities?.includes('showers') || rec.facility?.emoji_badges?.some((b: string) => b.toLowerCase().includes('shower')) ? "🚿 Showers" : "";
         const popupAmenities = [poolBadge, showerBadge].filter(Boolean).join(" • ");
         
-        const closeHours = rec.facility?.hours?.close || "10 PM";
+        const popupHours = rec.opening_hours_summary ? rec.opening_hours_summary : `Open until ${rec.facility?.hours?.close || "10 PM"}`;
         
         // Construct Google Maps URL following rules
         let mapsUrl = rec.google_maps_url;
@@ -502,7 +510,7 @@ function GoogleMapComponent({ apiKey, recommendations, selectedId, onSelectId, s
             </div>
             <div style="font-size: 0.72rem; font-weight: 700; color: #1e3a8a; margin-bottom: 4px;" class="map-popup-price">💰 ${priceLabel}</div>
             ${popupAmenities ? `<div style="font-size: 0.68rem; color: #475569; margin-bottom: 4px; font-weight: 500;">${popupAmenities}</div>` : ""}
-            <div style="font-size: 0.68rem; color: #059669; font-weight: 600; margin-bottom: 4px;">Open until ${closeHours}</div>
+            <div style="font-size: 0.68rem; color: #059669; font-weight: 600; margin-bottom: 4px;">${popupHours}</div>
             <div style="margin-top: 4px; border-top: 1px solid #e2e8f0; padding-top: 4px; display: flex; gap: 8px;">
               <a href="${rec.official_website_url || rec.website || 'https://maps.google.com'}" target="_blank" rel="noopener noreferrer" class="map-popup-website-link" style="color: #2563eb; text-decoration: none; font-weight: bold; font-size: 0.68rem; display: inline-block;">Facility website</a>
               <span style="color: #e2e8f0; font-size: 0.68rem;">•</span>
@@ -543,7 +551,7 @@ function GoogleMapComponent({ apiKey, recommendations, selectedId, onSelectId, s
       mapInstanceRef.current.setCenter(hotelPos);
       mapInstanceRef.current.setZoom(14);
     }
-  }, [recommendations, selectedId, showResults]);
+  }, [recommendations, selectedId, showResults, resolvedLocation]);
 
   return <div ref={mapRef} style={{ width: '100%', height: '100%', borderRadius: '8px' }} />;
 }
@@ -744,9 +752,28 @@ export default function App() {
 
         const parsed = structuredRecs.length > 0 ? structuredRecs : parseMarkdownToRecommendations(fullMarkdownText);
         if (parsed && parsed.length > 0) {
-          setRecommendations(parsed);
-          setSelectedRecId(parsed[0].facility.id);
-          const hasImpossible = parsed.some(r => r.eligibility_status === 'Rejected' || r.eligibility_status === 'Alternative');
+          const uniqueRecs: Recommendation[] = [];
+          const seenPlaceIds = new Set<string>();
+          const seenNames = new Set<string>();
+          
+          parsed.forEach(r => {
+            const pid = r.place_id || r.facility?.id;
+            const normName = ((r.name || r.facility?.name || "") + "||" + (r.address || r.facility?.address || "")).toLowerCase().trim().replace(/[^a-z0-9|]/g, "");
+            if (pid) {
+              if (seenPlaceIds.has(pid)) return;
+              seenPlaceIds.add(pid);
+            }
+            if (seenNames.has(normName)) return;
+            seenNames.add(normName);
+            uniqueRecs.push(r);
+          });
+          
+          const cappedRecs = uniqueRecs.slice(0, 3);
+          setRecommendations(cappedRecs);
+          if (cappedRecs.length > 0) {
+            setSelectedRecId(cappedRecs[0].id || cappedRecs[0].facility?.id || "");
+          }
+          const hasImpossible = cappedRecs.length > 0 && cappedRecs.every(r => r.eligibility_status === 'Rejected' || r.eligibility_status === 'Alternative');
           setNoOptionSatisfiesConstraints(hasImpossible);
           setIsDemoMode(false);
         } else {
@@ -779,7 +806,9 @@ export default function App() {
 
   const selectedRec = recommendations.find(r => r.facility.id === selectedRecId);
 
-  const getPhotoUrl = (id: string) => {
+  const getPhotoUrl = (rec: Recommendation) => {
+    if (rec.photo_url) return rec.photo_url;
+    const id = rec.facility?.id || rec.id;
     if (id === 'ymca_chicago') return 'https://images.unsplash.com/photo-1571902943202-507ec2618e8f?auto=format&fit=crop&w=400&q=80';
     if (id === 'ffc_union') return 'https://images.unsplash.com/photo-1540497077202-7c8a3999166f?auto=format&fit=crop&w=400&q=80';
     return 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=400&q=80';
@@ -1054,6 +1083,7 @@ export default function App() {
                 selectedId={selectedRecId} 
                 onSelectId={setSelectedRecId} 
                 showResults={showResults} 
+                resolvedLocation={resolvedLocation}
               />
             ) : (
               <>
@@ -1264,7 +1294,7 @@ export default function App() {
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%' }}>
                 <AlertTriangle className="w-4 h-4 text-amber-500" />
                 <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>Using demo data because the live concierge service is unavailable.</span>
-                <span style={{ marginLeft: 'auto', background: '#d97706', color: '#fff', fontSize: '0.625rem', fontWeight: 800, padding: '2px 6px', borderRadius: '4px', textTransform: 'uppercase' }}>Demo fallback data</span>
+                <span style={{ marginLeft: 'auto', background: '#d97706', color: '#fff', fontSize: '0.625rem', fontWeight: 800, padding: '2px 6px', borderRadius: '4px', textTransform: 'uppercase' }}>Demo Fallback</span>
               </div>
               {dataWarning && (
                 <div style={{ fontSize: '0.75rem', color: '#b45309', borderTop: '1px dashed #fcd34d', paddingTop: '4px', marginTop: '2px' }}>
@@ -1274,7 +1304,7 @@ export default function App() {
             </div>
           ) : (
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '4px' }}>
-              <span style={{ background: '#10b981', color: '#fff', fontSize: '0.625rem', fontWeight: 800, padding: '3px 8px', borderRadius: '4px', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' }}>✨ Live agent result</span>
+              <span style={{ background: '#10b981', color: '#fff', fontSize: '0.625rem', fontWeight: 800, padding: '3px 8px', borderRadius: '4px', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' }}>✨ Live Google Data</span>
             </div>
           )}
 
@@ -1298,7 +1328,7 @@ export default function App() {
                   className={`rec-card ${isSelected ? 'selected' : ''}`}
                 >
                   {/* Photo Cover Area with bottom gradient overlay */}
-                  <div className="photo-area" style={{ backgroundImage: `url(${getPhotoUrl(rec.facility.id)})` }}>
+                  <div className="photo-area" style={{ backgroundImage: `url(${getPhotoUrl(rec)})` }}>
                     <div className="photo-gradient" />
                   </div>
 
@@ -1350,7 +1380,10 @@ export default function App() {
 
                     {/* Operational Status Row */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.7rem', fontWeight: 700, color: '#2563eb' }}>
-                      <span>🟢 Open now • until {rec.facility.hours.close}</span>
+                      <span>
+                        {rec.is_open_now ? "🟢 Open now" : "🔴 Closed"}
+                        {rec.opening_hours_summary ? ` • ${rec.opening_hours_summary}` : ""}
+                      </span>
                     </div>
 
                     {/* Card Concierge summary line at the bottom */}
@@ -1458,15 +1491,15 @@ export default function App() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Clock className="w-4 h-4 text-blue-500" />
                   <div>
-                    <strong>Hours Status:</strong> Open now • until {selectedRec.facility.hours.close}
+                    <strong>Hours Status:</strong> {selectedRec.is_open_now ? "Open now" : "Closed"} {selectedRec.opening_hours_summary ? `• ${selectedRec.opening_hours_summary}` : ""}
                   </div>
                 </div>
 
-                {selectedRec.facility.hours.pool_hours && (
+                {(selectedRec.pool_hours || selectedRec.facility?.hours?.pool_hours) && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span style={{ fontSize: '0.9rem' }}>🏊</span>
                     <div>
-                      <strong>Pool Schedule:</strong> {selectedRec.facility.hours.pool_hours}
+                      <strong>Pool Schedule:</strong> {selectedRec.pool_hours || selectedRec.facility.hours.pool_hours}
                     </div>
                   </div>
                 )}

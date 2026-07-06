@@ -190,6 +190,8 @@ def fetch_facility_details(facility_id: str, has_ymca: bool = False) -> Dict[str
     phone = ""
     maps_url = ""
     
+    photo_url = ""
+    photo_source = "placeholder"
     # 1. Live mode
     if key and not facility_id.startswith("mock_"):
         details = get_place_details_live(facility_id) or {}
@@ -198,6 +200,11 @@ def fetch_facility_details(facility_id: str, has_ymca: bool = False) -> Dict[str
         address = details.get("formatted_address", "")
         phone = details.get("formatted_phone_number", "")
         maps_url = details.get("url", "")
+        if details.get("photos"):
+            photo_ref = details["photos"][0].get("photo_reference")
+            if photo_ref:
+                photo_url = f"https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference={photo_ref}&key={key}"
+                photo_source = "google_places"
 
     # Overrides for McCormick YMCA specifically (even if mock or missing details)
     if "mccormick" in facility_id.lower() or "mccormick" in name.lower() or "ymca_mccormick" in facility_id.lower():
@@ -325,7 +332,9 @@ def fetch_facility_details(facility_id: str, has_ymca: bool = False) -> Dict[str
                 "hours_confidence": hours_confidence,
                 "amenities_confidence": amenities_confidence,
                 "pricing_confidence": pricing_confidence,
-                "data_warnings": data_warnings
+                "data_warnings": data_warnings,
+                "photo_url": photo_url,
+                "photo_source": photo_source
             }
         }
     }

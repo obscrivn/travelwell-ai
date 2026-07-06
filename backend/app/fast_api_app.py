@@ -172,6 +172,7 @@ def parse_markdown_to_recommendations(markdown: str, budget_sel: str = "20", has
         parsed_phone = ''
         parsed_website = ''
         parsed_maps_url = ''
+        parsed_hours = ''
         
         for line in lines:
             lower = line.lower()
@@ -217,6 +218,9 @@ def parse_markdown_to_recommendations(markdown: str, budget_sel: str = "20", has
             elif '- google maps url:' in lower:
                 parts = line.split(':', 1)
                 parsed_maps_url = parts[1].strip() if len(parts) > 1 else ''
+            elif '- hours:' in lower or '- facility hours:' in lower or '- opening hours:' in lower:
+                parts = line.split(':', 1)
+                parsed_hours = parts[1].strip() if len(parts) > 1 else ''
                 
         # Overrides/Checks for McCormick YMCA
         is_mccormick = "mccormick" in facility_name.lower() or "mccormick" in parsed_website.lower() or "mccormick" in parsed_place_id.lower()
@@ -322,8 +326,54 @@ def parse_markdown_to_recommendations(markdown: str, budget_sel: str = "20", has
             }
         }
         
+        # Resolve hours dynamically based on source/parse
+        if is_mccormick:
+            resolved_hours_summary = "Open 06:00 - 21:00"
+            resolved_facility_hours = "Monday-Friday: 6 AM - 9 PM, Saturday-Sunday: 7 AM - 7 PM"
+        elif "mcgaw" in facility_name.lower():
+            resolved_hours_summary = "Open 06:00 - 22:00"
+            resolved_facility_hours = "Monday-Friday: 6 AM - 10 PM, Saturday-Sunday: 7 AM - 8 PM"
+        elif parsed_hours:
+            resolved_hours_summary = parsed_hours
+            resolved_facility_hours = parsed_hours
+        else:
+            is_live_mode = bool(os.getenv("GOOGLE_MAPS_API_KEY"))
+            resolved_hours_summary = "Hours unavailable" if is_live_mode else "Open 06:00 - 22:00"
+            resolved_facility_hours = "Hours unavailable" if is_live_mode else "Open 06:00 - 22:00"
+
+        # Enrich facility details from fetch_facility_details (using place_id or fallback id)
+        from app.tools.facility_tools import fetch_facility_details
+        enrich_id = parsed_place_id or facility_id
+        photo_url = ""
+        photo_source = "placeholder"
+        if enrich_id and not enrich_id.startswith("mock_"):
+            try:
+                res = fetch_facility_details(enrich_id, has_ymca=has_ymca)
+                if res.get("status") == "success":
+                    meta = res["details"].get("source_metadata", {})
+                    if meta.get("formatted_address") and meta["formatted_address"] != "Address unavailable":
+                        if not parsed_address or parsed_address == "Address unavailable":
+                            parsed_address = meta["formatted_address"]
+                    if meta.get("phone_number") and meta["phone_number"] != "Unknown Phone":
+                        if not parsed_phone or parsed_phone == "Unknown Phone":
+                            parsed_phone = meta["phone_number"]
+                    if meta.get("official_website_url") and meta["official_website_url"] != "Unknown Website":
+                        if not parsed_website or parsed_website == "Unknown Website" or parsed_website == "https://maps.google.com":
+                            parsed_website = meta["official_website_url"]
+                    if meta.get("google_maps_url"):
+                        if not parsed_maps_url or parsed_maps_url == "https://maps.google.com":
+                            parsed_maps_url = meta["google_maps_url"]
+                    if meta.get("photo_url"):
+                        photo_url = meta["photo_url"]
+                        photo_source = meta.get("photo_source", "google_places")
+                    if meta.get("facility_hours") and meta["facility_hours"] not in ["Hours unknown", "Hours unavailable"]:
+                        resolved_facility_hours = meta["facility_hours"]
+                        resolved_hours_summary = meta["facility_hours"]
+            except Exception as e:
+                print(f"Error enriching recommendation card details: {e}")
+
         card_summary = f"✓ Free" if effective_price == 0.0 else f"✓ ${effective_price}" if effective_price is not None else "✓ Price unknown"
-        card_summary += f" • {walking_time}-minute walk • Open until 10 PM"
+        card_summary += f" • {walking_time}-minute walk" + (f" • {resolved_hours_summary}" if resolved_hours_summary != "Hours unavailable" else "")
         
         recommendation_entry = {
             # Canonical Fields
@@ -339,7 +389,7 @@ def parse_markdown_to_recommendations(markdown: str, budget_sel: str = "20", has
             "google_maps_url": parsed_maps_url or "https://maps.google.com",
             "official_website_url": parsed_website or "Unknown Website",
             "formatted_address": parsed_address or "Address unavailable",
-            "facility_hours": "Monday-Friday: 6 AM - 9 PM, Saturday-Sunday: 7 AM - 7 PM" if is_mccormick else "Open 06:00 - 22:00",
+            "facility_hours": resolved_facility_hours,
             "pool_hours": "Monday-Friday: 7 AM - 8 PM, Saturday-Sunday: 8 AM - 6 PM" if is_mccormick else "Pool hours unknown",
             "amenity_evidence": "Indoor pool, treadmills, showers, parking identified on official McCormick YMCA site." if is_mccormick else "Discovery details only.",
             
@@ -357,7 +407,8 @@ def parse_markdown_to_recommendations(markdown: str, budget_sel: str = "20", has
             "amenities_confidence": "high" if is_mccormick else "medium",
             "pricing_confidence": "high" if is_mccormick else "medium",
             
-            "photo_url": "",
+            "photo_url": photo_url,
+            "photo_source": photo_source,
             "amenities": [],
             "required_constraints": ["budget", "membership"] if clean_eligibility == "Fits Your Criteria" else [],
             "preferred_amenities": [],
@@ -368,8 +419,8 @@ def parse_markdown_to_recommendations(markdown: str, budget_sel: str = "20", has
             "effective_price": effective_price,
             "pricing_status": pricing_status,
             "access_type": access_type,
-            "is_open_now": True,
-            "opening_hours_summary": "Open 06:00 - 21:00" if is_mccormick else "Open 06:00 - 22:00",
+            "is_open_now": False if "closed" in resolved_hours_summary.lower() else True,
+            "opening_hours_summary": resolved_hours_summary,
             "validation_status": "passed" if clean_eligibility == "Fits Your Criteria" else "warning" if clean_eligibility == "Alternative" else "failed",
             "eligibility_status": clean_eligibility,
             "confidence": 1.0 if clean_eligibility == "Fits Your Criteria" else 0.7 if clean_eligibility == "Alternative" else 0.3,
@@ -388,7 +439,21 @@ def parse_markdown_to_recommendations(markdown: str, budget_sel: str = "20", has
         recommendations.append(recommendation_entry)
         rank += 1
         
-    return recommendations
+    unique_recs = []
+    seen_place_ids = set()
+    seen_names = set()
+    for r in recommendations:
+        pid = r.get("place_id") or r.get("id")
+        norm_name = ((r.get("name") or "") + "||" + (r.get("address") or "")).lower().strip()
+        if pid:
+            if pid in seen_place_ids:
+                continue
+            seen_place_ids.add(pid)
+        if norm_name in seen_names:
+            continue
+        seen_names.add(norm_name)
+        unique_recs.append(r)
+    return unique_recs[:3]
 
 
 @app.post("/api/recommend")
@@ -404,6 +469,12 @@ async def recommend_workout(request: Request):
         body = await request.json()
         
         location = body.get("location", "Chicago")
+        
+        from app.services.google_maps import geocode_address
+        resolved_loc = geocode_address(location)
+        resolved_lat = resolved_loc.get("lat", 41.8817)
+        resolved_lng = resolved_loc.get("lng", -87.6278)
+        resolved_name = resolved_loc.get("formatted_address") or resolved_loc.get("display_name") or location
         time_window = body.get("timeWindow", "6:00 PM - 9:00 PM")
         budget_sel = body.get("budgetSelection", "20")
         has_ymca = body.get("hasYmca", False)
@@ -486,9 +557,9 @@ async def recommend_workout(request: Request):
                 "type": "result",
                 "data": {
                     "resolvedLocation": {
-                        "display_name": location,
-                        "lat": 41.8817,
-                        "lng": -87.6278
+                        "display_name": resolved_name,
+                        "lat": resolved_lat,
+                        "lng": resolved_lng
                     },
                     "recommendations": recommendations,
                     "selectedFacility": recommendations[0]["facility"] if recommendations else {},

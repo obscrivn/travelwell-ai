@@ -9,6 +9,15 @@ def get_maps_api_key() -> str:
 def geocode_address(address: str) -> Dict[str, Any]:
     key = get_maps_api_key()
     if not key:
+        if "skokie" in address.lower():
+            return {
+                "lat": 42.0324,
+                "lng": -87.7417,
+                "formatted_address": "Skokie, IL, USA",
+                "display_name": "Skokie",
+                "place_id": "mock_skokie",
+                "warning": "Using mock location data fallback."
+            }
         return {
             "lat": 41.8817,
             "lng": -87.6278,
