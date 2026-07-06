@@ -76,6 +76,7 @@ export interface Recommendation {
   google_maps_url?: string;
   phone_number?: string;
   website?: string;
+  official_website_url?: string;
 }
 
 interface ErrorBoundaryProps {
@@ -502,7 +503,9 @@ function GoogleMapComponent({ apiKey, recommendations, selectedId, onSelectId, s
             <div style="font-size: 0.72rem; font-weight: 700; color: #1e3a8a; margin-bottom: 4px;" class="map-popup-price">💰 ${priceLabel}</div>
             ${popupAmenities ? `<div style="font-size: 0.68rem; color: #475569; margin-bottom: 4px; font-weight: 500;">${popupAmenities}</div>` : ""}
             <div style="font-size: 0.68rem; color: #059669; font-weight: 600; margin-bottom: 4px;">Open until ${closeHours}</div>
-            <div style="margin-top: 4px; border-top: 1px solid #e2e8f0; padding-top: 4px;">
+            <div style="margin-top: 4px; border-top: 1px solid #e2e8f0; padding-top: 4px; display: flex; gap: 8px;">
+              <a href="${rec.official_website_url || rec.website || 'https://maps.google.com'}" target="_blank" rel="noopener noreferrer" class="map-popup-website-link" style="color: #2563eb; text-decoration: none; font-weight: bold; font-size: 0.68rem; display: inline-block;">Facility website</a>
+              <span style="color: #e2e8f0; font-size: 0.68rem;">•</span>
               <a href="${mapsUrl}" target="_blank" rel="noopener noreferrer" class="map-popup-link" style="color: #2563eb; text-decoration: none; font-weight: bold; font-size: 0.68rem; display: inline-block;">Open in Maps →</a>
             </div>
           </div>
@@ -1419,9 +1422,9 @@ export default function App() {
                     <Phone className="w-3.5 h-3.5" />
                     <span>Call ({selectedRec.phone_number || selectedRec.facility?.phone || "Unknown Phone"})</span>
                   </a>
-                  <a href={selectedRec.website || selectedRec.facility?.website} target="_blank" rel="noreferrer" className="info-btn">
+                  <a href={selectedRec.official_website_url || selectedRec.website || selectedRec.facility?.website} target="_blank" rel="noreferrer" className="info-btn detail-website-link">
                     <ExternalLink className="w-3.5 h-3.5" />
-                    <span>Website</span>
+                    <span>Facility website</span>
                   </a>
                   {(() => {
                     let mapsUrl = selectedRec.google_maps_url;

@@ -57,3 +57,29 @@ It satisfies your membership reciprocity!
         assert "I understand" not in title
         assert "traveler profile" not in title
         assert "Recommendation Card:" not in title
+
+
+def test_mccormick_ymca_verification():
+    # Verify McCormick YMCA specific facts override Google Places
+    from app.tools.facility_tools import fetch_facility_details, scrape_schedules
+    
+    # Simulates fetch details for McCormick YMCA
+    res = fetch_facility_details("ymca_mccormick", has_ymca=True)
+    assert res["status"] == "success"
+    meta = res["details"]["source_metadata"]
+    
+    # Verified facts:
+    assert meta["official_website_url"] == "https://www.ymcachicago.org/mccormick/"
+    assert meta["formatted_address"] == "1834 N. Lawndale Ave, Chicago, IL 60647"
+    assert meta["phone_number"] == "773-235-2525"
+    assert meta["facility_hours"] == "Monday-Friday: 6 AM - 9 PM, Saturday-Sunday: 7 AM - 7 PM"
+    assert meta["pool_hours"] == "Monday-Friday: 7 AM - 8 PM, Saturday-Sunday: 8 AM - 6 PM"
+    
+    # Confidences:
+    assert meta["address_confidence"] == "high"
+    assert meta["phone_confidence"] == "high"
+    
+    # Source tracking:
+    assert meta["address_source"] == "official_site"
+    assert meta["phone_source"] == "official_site"
+

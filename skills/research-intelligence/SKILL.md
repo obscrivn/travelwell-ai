@@ -34,6 +34,7 @@ The Research & Intelligence Agent discovers potential workout locations and comp
 ## Rules
 - **No Hallucinated Pricing**: If pricing cannot be verified via tools, report it as "Pricing information not identified." Do not invent trial passes or membership rates.
 - **Budget Cap Enforcement**: Stop tool execution immediately and ask for clarification if a budget parameters is ambiguous (e.g. contains words like "under" but lacks a value).
+- **Evidence Hierarchy**: Google Places is discovery data, not final truth for facility operations. Official facility pages should be treated as stronger evidence when available.
 
 ## Uncertainty Handling
 - If free parking is not returned in the tools output, report: `"Free parking was not identified in the available facility data."` Do not output "No parking" or "Free parking likely available."
