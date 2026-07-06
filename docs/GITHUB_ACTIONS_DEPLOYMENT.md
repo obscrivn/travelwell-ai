@@ -10,7 +10,7 @@ To run the automated deployment workflow, configure the following secrets under 
 
 | Secret Name | Description | Example / Format |
 | :--- | :--- | :--- |
-| `GCP_PROJECT_ID` | The Google Cloud project ID. | `idea-to-launch-490803` |
+| `GCP_PROJECT_ID` | The Google Cloud project ID. | `your-gcp-project-id` |
 | `GCP_REGION` | Target deploy region for Cloud Run and Artifact Registry. | `us-central1` |
 | `GCP_SA_KEY` | JSON Key credential string for the authorized Service Account. | `{"type": "service_account", ...}` |
 | `GOOGLE_MAPS_API_KEY` | Backend Google Maps Platform credentials (Geocoding/Places/Routes). | `AIzaSy...` |
@@ -53,13 +53,13 @@ Run the following commands locally to shift traffic to a specific revision:
 # Revert travelwell-backend
 gcloud run services update-traffic travelwell-backend \
   --to-revisions=travelwell-backend-REVISION_NAME=100 \
-  --region=us-central1 \
-  --project=idea-to-launch-490803
+  --region=your-gcp-region \
+  --project=your-gcp-project-id
 
 # Revert travelwell-frontend
 gcloud run services update-traffic travelwell-frontend \
   --to-revisions=travelwell-frontend-REVISION_NAME=100 \
-  --region=us-central1 \
-  --project=idea-to-launch-490803
+  --region=your-gcp-region \
+  --project=your-gcp-project-id
 ```
 *(Replace `REVISION_NAME` with the targeted historical revision string, e.g., `00008-brs`)*
