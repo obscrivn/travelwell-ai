@@ -6,22 +6,95 @@ from typing import Dict, Any, List
 def get_maps_api_key() -> str:
     return os.getenv("GOOGLE_MAPS_API_KEY") or os.getenv("GOOGLE_API_KEY") or ""
 
-def geocode_address(address: str) -> Dict[str, float]:
+def geocode_address(address: str) -> Dict[str, Any]:
     key = get_maps_api_key()
     if not key:
-        return {"lat": 41.8817, "lng": -87.6278} # Chicago Loop fallback
+        return {
+            "lat": 41.8817,
+            "lng": -87.6278,
+            "formatted_address": "Downtown Chicago, IL, USA",
+            "display_name": "Downtown Chicago",
+            "place_id": "mock_chicago",
+            "warning": "Using mock location data fallback."
+        }
     
     url = f"https://maps.googleapis.com/maps/api/geocode/json?address={requests.utils.quote(address)}&key={key}"
+    status = "UNKNOWN_ERROR"
+    err_msg = "Unknown error"
+    
     try:
         r = requests.get(url, timeout=10)
         r.raise_for_status()
         data = r.json()
-        if data.get("status") == "OK" and data.get("results"):
-            loc = data["results"][0]["geometry"]["location"]
-            return {"lat": loc["lat"], "lng": loc["lng"]}
+        status = data.get("status", "UNKNOWN_STATUS")
+        err_msg = data.get("error_message", "No error message provided.")
+        
+        if status == "OK" and data.get("results"):
+            result = data["results"][0]
+            loc = result["geometry"]["location"]
+            fmt_addr = result.get("formatted_address", address)
+            place_id = result.get("place_id", "live_place")
+            
+            display_name = address
+            if result.get("address_components"):
+                display_name = result["address_components"][0].get("long_name", address)
+                
+            return {
+                "lat": loc["lat"],
+                "lng": loc["lng"],
+                "formatted_address": fmt_addr,
+                "display_name": display_name,
+                "place_id": place_id,
+                "warning": "Using best location match." if len(data["results"]) > 1 else None
+            }
+        else:
+            print(f"Geocoding API status: {status}. Error message: {err_msg}")
     except Exception as e:
-        print(f"Geocoding error: {e}")
-    return {"lat": 41.8817, "lng": -87.6278}
+        print(f"Geocoding connection error: {e}")
+        err_msg = str(e)
+        
+    # Try Places Text Search fallback if Geocoding API fails or returns ZERO_RESULTS
+    print(f"Attempting Places search fallback for '{address}'...")
+    fallback_res = geocode_via_places_fallback(address, key)
+    if fallback_res:
+        return fallback_res
+        
+    return {
+        "lat": 41.8817,
+        "lng": -87.6278,
+        "formatted_address": address,
+        "display_name": address,
+        "place_id": "error_fallback",
+        "warning": f"Geocoding failed (Google Status: {status}. Error: {err_msg}). Using default Loop coordinates."
+    }
+
+def geocode_via_places_fallback(address: str, key: str) -> Dict[str, Any]:
+    url = f"https://maps.googleapis.com/maps/api/place/textsearch/json?query={requests.utils.quote(address)}&key={key}"
+    try:
+        r = requests.get(url, timeout=10)
+        r.raise_for_status()
+        data = r.json()
+        status = data.get("status", "UNKNOWN_STATUS")
+        if status == "OK" and data.get("results"):
+            result = data["results"][0]
+            loc = result["geometry"]["location"]
+            fmt_addr = result.get("formatted_address", address)
+            place_id = result.get("place_id", "live_place")
+            display_name = result.get("name", address)
+            return {
+                "lat": loc["lat"],
+                "lng": loc["lng"],
+                "formatted_address": fmt_addr,
+                "display_name": display_name,
+                "place_id": place_id,
+                "warning": "Geocoding API failed. Resolved via Places Text Search fallback."
+            }
+        else:
+            err_msg = data.get("error_message", "No details returned.")
+            print(f"Places Fallback search failed. Status: {status}. Error: {err_msg}")
+    except Exception as e:
+        print(f"Places Fallback exception: {e}")
+    return {}
 
 def search_places_live(location_query: str) -> List[Dict[str, Any]]:
     key = get_maps_api_key()

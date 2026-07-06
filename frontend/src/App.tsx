@@ -29,7 +29,7 @@ export interface Facility {
   emoji_badges: string[];
   pricing: {
     access_type: string;
-    cost: number;
+    cost: number | null;
     pass_detail: string;
   };
   hours: {
@@ -297,6 +297,7 @@ function GoogleMapComponent({ apiKey, recommendations, selectedId, onSelectId, s
   const mapRef = React.useRef<HTMLDivElement>(null);
   const mapInstanceRef = React.useRef<any>(null);
   const markersRef = React.useRef<any[]>([]);
+  const infoWindowRef = React.useRef<any>(null);
 
   React.useEffect(() => {
     if (window.google && window.google.maps) {
@@ -327,6 +328,7 @@ function GoogleMapComponent({ apiKey, recommendations, selectedId, onSelectId, s
       disableDefaultUI: true,
       zoomControl: true
     });
+    infoWindowRef.current = new window.google.maps.InfoWindow();
   };
 
   React.useEffect(() => {
@@ -342,8 +344,21 @@ function GoogleMapComponent({ apiKey, recommendations, selectedId, onSelectId, s
     const hotelMarker = new window.google.maps.Marker({
       position: hotelPos,
       map: mapInstanceRef.current,
-      title: "Your Hotel",
-      icon: "http://maps.google.com/mapfiles/ms/icons/red-dot.png"
+      title: "Your Location",
+      label: {
+        text: "YOU",
+        color: "#ffffff",
+        fontSize: "9px",
+        fontWeight: "bold"
+      },
+      icon: {
+        path: window.google.maps.SymbolPath.CIRCLE,
+        scale: 14,
+        fillColor: "#4f46e5",
+        fillOpacity: 1,
+        strokeColor: "#ffffff",
+        strokeWeight: 2.5
+      }
     });
     markersRef.current.push(hotelMarker);
 
@@ -362,9 +377,67 @@ function GoogleMapComponent({ apiKey, recommendations, selectedId, onSelectId, s
             : "http://maps.google.com/mapfiles/ms/icons/green-dot.png"
         });
 
+        const rating = rec.facility.rating ? `⭐ ${rec.facility.rating}` : "⭐ Rating unknown";
+        const walkTime = rec.facility.distance.walking_time_minutes 
+          ? `🚶 ${rec.facility.distance.walking_time_minutes} min` 
+          : "";
+        const driveTime = rec.facility.distance.transit_time_minutes 
+          ? `🚗 ${rec.facility.distance.transit_time_minutes} min` 
+          : "";
+        const price = rec.facility.pricing.cost === 0 
+          ? "💰 Free" 
+          : rec.facility.pricing.cost === null
+            ? "💰 Price unknown" 
+            : `💰 $${rec.facility.pricing.cost}`;
+        
+        const openStatus = rec.facility.hours.open && rec.facility.hours.open !== "unknown"
+          ? `Open now: ${rec.facility.hours.open} - ${rec.facility.hours.close}`
+          : "Hours unknown";
+          
+        const amenitiesList = rec.facility.amenities && rec.facility.amenities.length > 0
+          ? rec.facility.amenities.slice(0, 3).map(a => a.replace(/_/g, ' ')).join(' • ')
+          : "";
+          
+        const mapsLink = rec.facility.website && rec.facility.website !== "Unknown"
+          ? `<div style="margin-top: 6px; border-top: 1px solid #f1f5f9; padding-top: 4px;"><a href="${rec.facility.website}" target="_blank" rel="noopener noreferrer" style="color: #2563eb; text-decoration: none; font-weight: bold; font-size: 0.7rem; display: inline-block;">Open in Maps →</a></div>`
+          : "";
+
+        const contentString = `
+          <div style="font-family: system-ui, -apple-system, sans-serif; color: #1e293b; padding: 4px; min-width: 170px;">
+            <div style="font-weight: 700; font-size: 0.8rem; margin-bottom: 2px; color: #0f172a;">${rec.facility.name}</div>
+            <div style="font-size: 0.7rem; color: #64748b; margin-bottom: 3px; display: flex; gap: 4px; align-items: center;">
+              <span>${rating}</span>
+              ${walkTime ? `<span>• ${walkTime}</span>` : ""}
+              ${driveTime ? `<span>• ${driveTime}</span>` : ""}
+            </div>
+            <div style="font-size: 0.7rem; font-weight: 700; color: #0f172a; margin-bottom: 2px;">${price}</div>
+            ${amenitiesList ? `<div style="font-size: 0.65rem; color: #475569; margin-bottom: 3px;">✨ ${amenitiesList}</div>` : ""}
+            <div style="font-size: 0.65rem; color: #10b981; font-weight: 600;">${openStatus}</div>
+            ${mapsLink}
+          </div>
+        `;
+
+        const showInfoWindow = () => {
+          if (infoWindowRef.current && mapInstanceRef.current) {
+            infoWindowRef.current.setContent(contentString);
+            infoWindowRef.current.open(mapInstanceRef.current, marker);
+          }
+        };
+
+        marker.addListener('mouseover', () => {
+          showInfoWindow();
+        });
+
         marker.addListener('click', () => {
           onSelectId(rec.facility.id);
+          showInfoWindow();
         });
+
+        if (isSelected) {
+          setTimeout(() => {
+            showInfoWindow();
+          }, 150);
+        }
 
         markersRef.current.push(marker);
       });
@@ -424,6 +497,13 @@ export default function App() {
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [selectedRecId, setSelectedRecId] = useState<string>("");
   const [isDemoMode, setIsDemoMode] = useState(false);
+  const [dataWarning, setDataWarning] = useState<string | null>(null);
+  const [resolvedLocation, setResolvedLocation] = useState<{
+    display_name?: string;
+    formatted_address?: string;
+    place_id?: string;
+    warning?: string | null;
+  } | null>(null);
 
   // Premium Vertical Timeline Stages
   const timelineStages = [
@@ -479,7 +559,9 @@ export default function App() {
     const topMatch = recs[0];
     const costText = topMatch.facility.pricing.cost === 0 
       ? "is free" 
-      : `costs $${topMatch.facility.pricing.cost}`;
+      : topMatch.facility.pricing.cost === null
+        ? "has unverified pricing"
+        : `costs $${topMatch.facility.pricing.cost}`;
     const walkTime = topMatch.facility.distance.walking_time_minutes;
 
     return `I found ${recs.length} spaces matching your selections. ${topMatch.facility.name} is your top match because it ${costText}, is only a ${walkTime}-minute walk away, and satisfies your requirements.`;
@@ -492,6 +574,21 @@ export default function App() {
     setShowResults(false);
     setNoOptionSatisfiesConstraints(false);
     setIsDemoMode(false);
+    setDataWarning(null);
+    setResolvedLocation(null);
+
+    // Resolve location
+    try {
+      const res = await fetch(`${config.apiBaseUrl}/resolve_location?address=${encodeURIComponent(location)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setResolvedLocation(data);
+      } else {
+        console.warn("Location resolution endpoint returned non-OK status");
+      }
+    } catch (err) {
+      console.error("Location resolution request failed:", err);
+    }
 
     const animateStages = async () => {
       for (let i = 0; i < timelineStages.length; i++) {
@@ -529,11 +626,12 @@ export default function App() {
           setNoOptionSatisfiesConstraints(hasImpossible);
           setIsDemoMode(false);
         } else {
-          throw new Error("No recommendations parsed");
+          throw new Error("No recommendations parsed from streaming markdown response.");
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error("Backend concierge unavailable, falling back to static demo:", err);
         setIsDemoMode(true);
+        setDataWarning(err?.message || "Connection refused to backend concierge service.");
         await animateStages();
         if (budgetSelection === "free" || budgetSelection === "10" || !hasYmca) {
           setNoOptionSatisfiesConstraints(true);
@@ -620,6 +718,18 @@ export default function App() {
                 className="form-input" 
                 placeholder="Hotel, coordinates, or city..."
               />
+              {resolvedLocation && (
+                <div style={{ marginTop: '6px', fontSize: '0.75rem', color: '#475569', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <div>
+                    📍 <strong>Searching near:</strong> {resolvedLocation.formatted_address || resolvedLocation.display_name}
+                  </div>
+                  {resolvedLocation.warning && (
+                    <div style={{ color: '#d97706', fontWeight: 600 }}>
+                      ⚠️ {resolvedLocation.warning}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="form-group">
@@ -971,10 +1081,17 @@ export default function App() {
       {showResults && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {isDemoMode ? (
-            <div className="white-card" style={{ background: '#fef3c7', borderColor: '#fde68a', color: '#92400e', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <AlertTriangle className="w-4 h-4 text-amber-500" />
-              <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>Using demo data because the live concierge service is unavailable.</span>
-              <span style={{ marginLeft: 'auto', background: '#d97706', color: '#fff', fontSize: '0.625rem', fontWeight: 800, padding: '2px 6px', borderRadius: '4px', textTransform: 'uppercase' }}>Demo fallback data</span>
+            <div className="white-card" style={{ background: '#fef3c7', borderColor: '#fde68a', color: '#92400e', padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%' }}>
+                <AlertTriangle className="w-4 h-4 text-amber-500" />
+                <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>Using demo data because the live concierge service is unavailable.</span>
+                <span style={{ marginLeft: 'auto', background: '#d97706', color: '#fff', fontSize: '0.625rem', fontWeight: 800, padding: '2px 6px', borderRadius: '4px', textTransform: 'uppercase' }}>Demo fallback data</span>
+              </div>
+              {dataWarning && (
+                <div style={{ fontSize: '0.75rem', color: '#b45309', borderTop: '1px dashed #fcd34d', paddingTop: '4px', marginTop: '2px' }}>
+                  <strong>Live failure reason:</strong> {dataWarning}
+                </div>
+              )}
             </div>
           ) : (
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '4px' }}>
@@ -1038,7 +1155,7 @@ export default function App() {
                       <div style={{ textAlign: 'center' }}>
                         <div style={{ fontSize: '0.58rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Day Pass</div>
                         <div style={{ fontSize: '0.75rem', fontWeight: 800, color: rec.facility.pricing.cost === 0 ? '#10b981' : '#334155' }}>
-                          {rec.facility.pricing.cost === 0 ? "FREE Reciprocity" : `$${rec.facility.pricing.cost}`}
+                          {rec.facility.pricing.cost === 0 ? "FREE Reciprocity" : rec.facility.pricing.cost === null ? "Pricing Unknown" : `$${rec.facility.pricing.cost}`}
                         </div>
                       </div>
                     </div>

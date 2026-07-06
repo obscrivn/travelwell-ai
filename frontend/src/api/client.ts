@@ -222,6 +222,13 @@ export function parseMarkdownToRecommendations(markdown: string): Recommendation
     let matchQualityStr = 'Excellent Match';
     let rationale = '';
 
+    let parsedPlaceId = '';
+    let parsedAddress = '';
+    let parsedCoords: { lat: number; lng: number } | null = null;
+    let parsedPhone = '';
+    let parsedWebsite = '';
+    let parsedMapsUrl = '';
+
     for (const line of lines) {
       const lower = line.toLowerCase();
       if (lower.includes('- distance') || lower.includes('- travel time')) {
@@ -236,6 +243,26 @@ export function parseMarkdownToRecommendations(markdown: string): Recommendation
         rationale = line.split(':')[1]?.trim() || '';
       } else if (lower.includes('- **recommendation rationale**:')) {
         rationale = line.split(':')[1]?.trim() || '';
+      } else if (lower.includes('- place id:')) {
+        parsedPlaceId = line.split(':')[1]?.trim() || '';
+      } else if (lower.includes('- address:')) {
+        parsedAddress = line.split(':')[1]?.trim() || '';
+      } else if (lower.includes('- coordinates:')) {
+        const coordsStr = line.split(':')[1]?.trim() || '';
+        const parts = coordsStr.replace(/[\[\]]/g, '').split(',');
+        if (parts.length === 2) {
+          const parsedLat = parseFloat(parts[0].trim());
+          const parsedLng = parseFloat(parts[1].trim());
+          if (!isNaN(parsedLat) && !isNaN(parsedLng)) {
+            parsedCoords = { lat: parsedLat, lng: parsedLng };
+          }
+        }
+      } else if (lower.includes('- phone:')) {
+        parsedPhone = line.split(':')[1]?.trim() || '';
+      } else if (lower.includes('- website:')) {
+        parsedWebsite = line.split(':').slice(1).join(':').trim() || '';
+      } else if (lower.includes('- google maps url:')) {
+        parsedMapsUrl = line.split(':').slice(1).join(':').trim() || '';
       }
     }
 
@@ -270,7 +297,12 @@ export function parseMarkdownToRecommendations(markdown: string): Recommendation
 
     const facility: Facility = {
       ...baseFacility,
+      id: parsedPlaceId || baseFacility.id,
       name: facilityName,
+      address: parsedAddress || baseFacility.address,
+      phone: parsedPhone || baseFacility.phone,
+      website: parsedWebsite || parsedMapsUrl || baseFacility.website,
+      coordinates: parsedCoords || baseFacility.coordinates,
       pricing: {
         ...baseFacility.pricing,
         cost,

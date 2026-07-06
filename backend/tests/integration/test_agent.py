@@ -24,6 +24,10 @@ from google.genai import types
 from app.agent import root_agent
 
 
+import time
+import pytest
+
+@pytest.mark.integration_live
 def test_agent_stream() -> None:
     """
     Integration test for the agent stream functionality.
@@ -40,14 +44,35 @@ def test_agent_stream() -> None:
         parts=[types.Part.from_text(text="I am at Downtown Chicago. I need to find a gym with showers and a pool between 6:00 PM and 9:00 PM. I have a YMCA membership, and my budget is $20.")]
     )
 
-    events = list(
-        runner.run(
-            new_message=message,
-            user_id="test_user",
-            session_id=session.id,
-            run_config=RunConfig(streaming_mode=StreamingMode.SSE),
-        )
-    )
+    max_retries = 3
+    base_delay = 5.0
+    events = []
+    
+    for attempt in range(max_retries):
+        try:
+            events = list(
+                runner.run(
+                    new_message=message,
+                    user_id="test_user",
+                    session_id=session.id,
+                    run_config=RunConfig(streaming_mode=StreamingMode.SSE),
+                )
+            )
+            break
+        except Exception as e:
+            err_str = str(e)
+            is_429 = "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "Resource exhausted" in err_str or "quota" in err_str or "Too Many Requests" in err_str
+            if is_429:
+                if attempt < max_retries - 1:
+                    sleep_time = base_delay * (2 ** attempt)
+                    print(f"\n[Warning] Vertex AI 429 Rate Limit hit. Retrying in {sleep_time}s... (Attempt {attempt+1}/{max_retries})")
+                    time.sleep(sleep_time)
+                    continue
+                else:
+                    pytest.skip(f"Skipping live agent integration test: Vertex AI 429 Resource Exhausted / Quota Limit hit. Error: {e}")
+            else:
+                raise e
+
     assert len(events) > 0, "Expected at least one message"
 
     full_output = ""

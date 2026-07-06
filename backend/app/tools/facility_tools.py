@@ -25,16 +25,18 @@ def search_places(location: str, budget: float) -> Dict[str, Any]:
     Returns:
         A dictionary containing the search status and a list of candidate facilities.
     """
-    from app.services.google_maps import get_maps_api_key, search_places_live
+    from app.services.google_maps import get_maps_api_key, search_places_live, geocode_address
     key = get_maps_api_key()
     if key:
-        places = search_places_live(location)
+        resolved = geocode_address(location)
+        search_query = resolved.get("formatted_address") or location
+        places = search_places_live(search_query)
         if places:
             facilities = []
             for p in places:
                 loc = p["geometry"].get("location", {})
-                lat = loc.get("lat", 41.8817)
-                lng = loc.get("lng", -87.6278)
+                lat = loc.get("lat", resolved.get("lat", 41.8817))
+                lng = loc.get("lng", resolved.get("lng", -87.6278))
                 facilities.append({
                     "id": p["place_id"],
                     "name": p["name"],
@@ -58,7 +60,8 @@ def search_places(location: str, budget: float) -> Dict[str, Any]:
             return {
                 "status": "success",
                 "facilities": facilities,
-                "data_mode": "live"
+                "data_mode": "live",
+                "resolved_location": resolved
             }
 
     # Fallback to mock data
@@ -85,28 +88,43 @@ def search_places(location: str, budget: float) -> Dict[str, Any]:
         "facilities": scenario.get("candidate_facilities_seed", [])
     }
 
-def fetch_facility_details(facility_id: str) -> Dict[str, Any]:
+def fetch_facility_details(facility_id: str, has_ymca: bool = False) -> Dict[str, Any]:
     """Retrieves access rules, day pass pricing, and verified details for a facility.
 
     Args:
         facility_id: The unique identifier for the facility.
+        has_ymca: Whether the user has an active YMCA membership.
 
     Returns:
         A dictionary containing pricing structure and verification status.
     """
     from app.services.google_maps import get_maps_api_key, get_place_details_live
     key = get_maps_api_key()
+    
+    # 1. Live mode
     if key and not facility_id.startswith("mock_"):
         details = get_place_details_live(facility_id)
         if details:
+            name = details.get("name", "")
+            is_ymca = "ymca" in name.lower()
+            
+            pricing = {
+                "access_type": "unknown",
+                "cost": -1.0,
+                "pass_detail": "Pricing information not identified in Places details."
+            }
+            
+            if has_ymca and is_ymca:
+                pricing = {
+                    "access_type": "membership_reciprocity",
+                    "cost": 0.0,
+                    "pass_detail": "Free access via national YMCA membership reciprocity."
+                }
+                
             return {
                 "status": "success",
                 "details": {
-                    "pricing": {
-                        "access_type": "unknown",
-                        "cost": -1.0,
-                        "pass_detail": "Pricing information not identified in Places details."
-                    },
+                    "pricing": pricing,
                     "source_metadata": {
                         "provider": "google_places",
                         "verified": True,
@@ -117,14 +135,33 @@ def fetch_facility_details(facility_id: str) -> Dict[str, Any]:
                 }
             }
 
+    # 2. Mock mode fallback
     data = load_mock_data()
     for scenario in data.get("scenarios", []):
         for fac in scenario.get("candidate_facilities_seed", []):
             if fac.get("id") == facility_id:
+                name = fac.get("name", "")
+                is_ymca = "ymca" in name.lower()
+                pricing = fac.get("pricing").copy()
+                
+                if is_ymca:
+                    if has_ymca:
+                        pricing["access_type"] = "membership_reciprocity"
+                        pricing["cost"] = 0.0
+                        pricing["pass_detail"] = "Free access via national YMCA membership reciprocity."
+                    else:
+                        pricing["access_type"] = "day_pass"
+                        pricing["cost"] = 25.0
+                        pricing["pass_detail"] = "estimated_guest_pass: $25 day pass without active membership."
+                else:
+                    if pricing.get("access_type") == "membership_reciprocity":
+                        pricing["access_type"] = "day_pass"
+                        pricing["cost"] = 20.0
+                
                 return {
                     "status": "success",
                     "details": {
-                        "pricing": fac.get("pricing"),
+                        "pricing": pricing,
                         "source_metadata": fac.get("source_metadata")
                     }
                 }

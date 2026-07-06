@@ -76,6 +76,20 @@ app: FastAPI = get_fast_api_app(
 app.title = "backend"
 app.description = "API for interacting with the Agent backend"
 
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "https://travelwell-frontend-163831374566.us-central1.run.app",
+        "http://localhost:8000"
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 @app.post("/feedback")
 def collect_feedback(feedback: Feedback) -> dict[str, str]:
@@ -89,6 +103,13 @@ def collect_feedback(feedback: Feedback) -> dict[str, str]:
     """
     logger.log_struct(feedback.model_dump(), severity="INFO")
     return {"status": "success"}
+
+
+@app.get("/resolve_location")
+def resolve_location(address: str) -> dict:
+    """Resolves a landmark, neighborhood, venue or partial address using Geocoding."""
+    from app.services.google_maps import geocode_address
+    return geocode_address(address)
 
 
 # Main execution

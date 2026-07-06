@@ -39,7 +39,7 @@ Your job is to parse the user's travel location, budget, active memberships, and
 Follow the guidelines in research-intelligence skill:
 1. Parse the budget: Parse expressions like "under $5" or "under 5$" to 5.0. If budget is ambiguous/incomplete, STOP immediately and ask for clarification. If not mentioned, budget is 999.0.
 2. Call `search_places` to discover candidate facilities for the destination.
-3. Call `fetch_facility_details` for each discovered facility to verify guest pass costs and membership reciprocity.
+3. Call `fetch_facility_details` for each discovered facility to verify guest pass costs and membership reciprocity. You MUST extract whether the user has an active YMCA membership from the user's prompt (e.g. check if they say they have a YMCA membership) and pass it as the `has_ymca` parameter (True or False) to `fetch_facility_details`.
 4. Call `scrape_schedules` to retrieve open hours, reviews, crowd warnings, and amenities list.
 5. Preserving Uncertainty: If details are not returned by tools, report them as "not identified" (e.g. "Free parking was not identified in the available facility data"). Do not assume or hallucinate.
 6. Compile all findings into a detailed summary of discovered facilities.
@@ -99,6 +99,12 @@ Instructions:
 - Emoji Amenity Badges: [e.g. 🏊 🏃 🚿 🔒]
 - Eligibility Status: [Fits Your Criteria / Alternative / Rejected]
 - Match Quality: [Excellent Match / Good Alternative / Limited Match]
+- Place ID: [Google Places place_id or mock ID]
+- Address: [formatted address]
+- Coordinates: [latitude, longitude]
+- Phone: [phone number]
+- Website: [website URL]
+- Google Maps URL: [Google Maps link]
 
 #### Constraint Satisfaction
 - ✅ Budget ≤ $[value]
