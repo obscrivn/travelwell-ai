@@ -24,6 +24,8 @@ from collections.abc import Iterator
 from typing import Any
 
 import pytest
+
+pytestmark = pytest.mark.integration_live
 import requests
 from a2a.types import (
     Message,
