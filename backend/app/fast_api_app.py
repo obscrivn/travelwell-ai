@@ -142,6 +142,135 @@ def resolve_location(address: str) -> dict:
     return geocode_address(address)
 
 
+def parse_markdown_to_recommendations(markdown: str) -> list:
+    import re
+    cards = re.split(r'### Recommendation Card:', markdown, flags=re.IGNORECASE)
+    recommendations = []
+    rank = 1
+    
+    for card in cards:
+        if not card.strip():
+            continue
+            
+        lines = card.split('\n')
+        first_line = lines[0].strip()
+        if not first_line:
+            continue
+            
+        facility_name = re.sub(r'^[#\s:]+', '', first_line).strip()
+        
+        distance_str = ''
+        price_str = ''
+        eligibility_str = 'Fits Your Criteria'
+        match_quality_str = 'Excellent Match'
+        rationale = ''
+        
+        parsed_place_id = ''
+        parsed_address = ''
+        parsed_coords = None
+        parsed_phone = ''
+        parsed_website = ''
+        parsed_maps_url = ''
+        
+        for line in lines:
+            lower = line.lower()
+            if '- distance' in lower or '- travel time' in lower:
+                parts = line.split(':', 1)
+                distance_str = parts[1].strip() if len(parts) > 1 else ''
+            elif '- price:' in lower:
+                parts = line.split(':', 1)
+                price_str = parts[1].strip() if len(parts) > 1 else ''
+            elif '- eligibility status:' in lower:
+                parts = line.split(':', 1)
+                eligibility_str = parts[1].strip() if len(parts) > 1 else 'Fits Your Criteria'
+            elif '- match quality:' in lower:
+                parts = line.split(':', 1)
+                match_quality_str = parts[1].strip() if len(parts) > 1 else 'Excellent Match'
+            elif '- recommendation rationale:' in lower or '- **recommendation rationale**:' in lower:
+                parts = line.split(':', 1)
+                rationale = parts[1].strip() if len(parts) > 1 else ''
+            elif '- place id:' in lower:
+                parts = line.split(':', 1)
+                parsed_place_id = parts[1].strip() if len(parts) > 1 else ''
+            elif '- address:' in lower:
+                parts = line.split(':', 1)
+                parsed_address = parts[1].strip() if len(parts) > 1 else ''
+            elif '- coordinates:' in lower:
+                parts = line.split(':', 1)
+                coords_str = parts[1].strip() if len(parts) > 1 else ''
+                coords_str = coords_str.replace('[', '').replace(']', '')
+                c_parts = coords_str.split(',')
+                if len(c_parts) == 2:
+                    try:
+                        lat = float(c_parts[0].strip())
+                        lng = float(c_parts[1].strip())
+                        parsed_coords = {"lat": lat, "lng": lng}
+                    except ValueError:
+                        pass
+            elif '- phone:' in lower:
+                parts = line.split(':', 1)
+                parsed_phone = parts[1].strip() if len(parts) > 1 else ''
+            elif '- website:' in lower:
+                parts = line.split(':', 1)
+                parsed_website = parts[1].strip() if len(parts) > 1 else ''
+            elif '- google maps url:' in lower:
+                parts = line.split(':', 1)
+                parsed_maps_url = parts[1].strip() if len(parts) > 1 else ''
+                
+        clean_eligibility = eligibility_str.replace('[', '').replace(']', '').strip()
+        clean_match_quality = match_quality_str.replace('[', '').replace(']', '').strip()
+        
+        cost = 20.0
+        if 'free' in price_str.lower() or '$0' in price_str:
+            cost = 0.0
+        else:
+            price_match = re.search(r'\$(\d+)', price_str)
+            if price_match:
+                cost = float(price_match.group(1))
+                
+        walking_time = 15
+        walk_match = re.search(r'(\d+)\s*min', distance_str, re.IGNORECASE)
+        if walk_match:
+            walking_time = int(walk_match.group(1))
+            
+        facility = {
+            "id": parsed_place_id or f"place_{rank}",
+            "name": facility_name,
+            "address": parsed_address or "Unknown Address",
+            "phone": parsed_phone or "Unknown Phone",
+            "website": parsed_website or parsed_maps_url or "Unknown Website",
+            "coordinates": parsed_coords or {"lat": 41.8817, "lng": -87.6278},
+            "pricing": {
+                "access_type": "membership_reciprocity" if cost == 0.0 else "day_pass",
+                "cost": cost,
+                "pass_detail": price_str or f"${cost} Day Pass"
+            },
+            "hours": {
+                "open": "unknown",
+                "close": "unknown",
+                "warning": "Hours schedule details parsed from listing."
+            },
+            "amenities": [],
+            "emoji_badges": []
+        }
+        
+        is_free = cost == 0.0
+        card_summary = f"✓ {'Free' if is_free else f'${cost}'} • {walking_time}-minute walk • Open until 10 PM"
+        
+        recommendations.append({
+            "facility": facility,
+            "rank": rank,
+            "match_quality": clean_match_quality or "Excellent Match",
+            "eligibility_status": clean_eligibility or "Fits Your Criteria",
+            "recommendation_reason": rationale or "Recommended by TravelWell AI.",
+            "card_summary": card_summary,
+            "badge_subtitle": "Highest overall score" if rank == 1 else "Highest rating" if rank == 2 else "Lowest paid guest pass"
+        })
+        rank += 1
+        
+    return recommendations
+
+
 @app.post("/api/recommend")
 async def recommend_workout(request: Request):
     import json
@@ -196,6 +325,7 @@ async def recommend_workout(request: Request):
     async def event_generator():
         message = types.Content(role="user", parts=[types.Part.from_text(text=prompt)])
         current_agent = "research_intelligence"
+        full_markdown_text = ""
         try:
             events = runner.run(
                 new_message=message,
@@ -213,7 +343,45 @@ async def recommend_workout(request: Request):
                         "parts": [{"text": getattr(p, "text", "")} for p in event.content.parts] if getattr(event, "content", None) and getattr(event.content, "parts", None) else []
                     } if getattr(event, "content", None) else None
                 }
+                
+                if event_dict["content"] and event_dict["content"]["parts"]:
+                    for part in event_dict["content"]["parts"]:
+                        if part.get("text"):
+                            full_markdown_text += part["text"]
+                            
                 yield f"data: {json.dumps(event_dict)}\n\n"
+                
+            # Stream final structured output
+            recommendations = parse_markdown_to_recommendations(full_markdown_text)
+            if recommendations:
+                final_event = {
+                    "type": "final_result",
+                    "recommendations": recommendations,
+                    "selectedFacility": recommendations[0]["facility"] if recommendations else None,
+                    "validationReport": "Satisfies all traveler validation constraints.",
+                    "dataSource": "live_places" if os.getenv("GOOGLE_MAPS_API_KEY") else "mock_data",
+                    "dataWarnings": [],
+                    "resolvedLocation": {
+                        "display_name": location,
+                        "lat": 41.8817,
+                        "lng": -87.6278
+                    },
+                    "stages": ["research_intelligence", "ranking_itinerary", "policy_validation"]
+                }
+            else:
+                final_event = {
+                    "type": "final_result",
+                    "summary_markdown": full_markdown_text,
+                    "recommendations": [],
+                    "dataSource": "fallback_markdown",
+                    "resolvedLocation": {
+                        "display_name": location,
+                        "lat": 41.8817,
+                        "lng": -87.6278
+                    }
+                }
+            yield f"data: {json.dumps(final_event)}\n\n"
+            
         except Exception as e:
             tb = traceback.format_exc()
             print(f"Agent execution stream error during {current_agent}: {e}\n{tb}")

@@ -611,6 +611,7 @@ export default function App() {
 
     const runBackendStream = async () => {
       try {
+        let structuredRecs: any[] = [];
         const fullMarkdownText = await runConciergeStream({
           location,
           timeWindow,
@@ -628,9 +629,21 @@ export default function App() {
           } else if (event.author === 'policy_validation') {
             setCurrentStageIndex(6);
           }
+          if (event.type === 'final_result') {
+            if (event.recommendations && event.recommendations.length > 0) {
+              structuredRecs = event.recommendations;
+            } else if (event.summary_markdown) {
+              console.warn("Structured recommendations missing. Using markdown fallback.");
+              const parsed = parseMarkdownToRecommendations(event.summary_markdown);
+              if (parsed && parsed.length > 0) {
+                structuredRecs = parsed;
+              }
+              setDataWarning("Structured JSON recommendations not returned from backend. Using parsed markdown fallback.");
+            }
+          }
         }, () => {}, config.apiBaseUrl);
 
-        const parsed = parseMarkdownToRecommendations(fullMarkdownText);
+        const parsed = structuredRecs.length > 0 ? structuredRecs : parseMarkdownToRecommendations(fullMarkdownText);
         if (parsed && parsed.length > 0) {
           setRecommendations(parsed);
           setSelectedRecId(parsed[0].facility.id);
@@ -638,7 +651,7 @@ export default function App() {
           setNoOptionSatisfiesConstraints(hasImpossible);
           setIsDemoMode(false);
         } else {
-          throw new Error("No recommendations parsed from streaming markdown response.");
+          throw new Error("No recommendations parsed from streaming response.");
         }
       } catch (err: any) {
         console.error("Backend concierge unavailable, falling back to static demo:", err);
