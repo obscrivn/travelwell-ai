@@ -62,6 +62,73 @@ export interface Recommendation {
   badge_subtitle: string;
 }
 
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+}
+
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  public state: ErrorBoundaryState = {
+    hasError: false
+  };
+
+  public static getDerivedStateFromError(_: Error): ErrorBoundaryState {
+    return { hasError: true };
+  }
+
+  public componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error("ErrorBoundary caught an error in dashboard rendering:", error, errorInfo);
+  }
+
+  public render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ 
+          padding: '24px', 
+          textAlign: 'center', 
+          border: '1.5px dashed #ef4444', 
+          background: '#fef2f2', 
+          borderRadius: '12px', 
+          margin: '20px 0',
+          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+          maxWidth: '600px',
+          marginLeft: 'auto',
+          marginRight: 'auto'
+        }}>
+          <span style={{ fontSize: '2.5rem' }}>⚠️</span>
+          <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#991b1b', margin: '12px 0 6px 0' }}>Render Error</h3>
+          <p style={{ fontSize: '0.85rem', color: '#7f1d1d', margin: 0, fontWeight: 500 }}>
+            TravelWell received a response, but could not render it.
+          </p>
+          <button 
+            onClick={() => this.setState({ hasError: false })}
+            style={{ 
+              marginTop: '14px', 
+              background: '#dc2626', 
+              color: '#ffffff', 
+              border: 'none', 
+              padding: '8px 16px', 
+              borderRadius: '6px', 
+              fontWeight: 700, 
+              cursor: 'pointer',
+              fontSize: '0.75rem',
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px'
+            }}
+          >
+            Try Again
+          </button>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 const USER_FACILITIES_ELIGIBLE: Recommendation[] = [
   {
     rank: 1,
@@ -377,28 +444,28 @@ function GoogleMapComponent({ apiKey, recommendations, selectedId, onSelectId, s
             : "http://maps.google.com/mapfiles/ms/icons/green-dot.png"
         });
 
-        const rating = rec.facility.rating ? `⭐ ${rec.facility.rating}` : "⭐ Rating unknown";
-        const walkTime = rec.facility.distance.walking_time_minutes 
+        const rating = rec.facility?.rating ? `⭐ ${rec.facility.rating}` : "⭐ Rating unknown";
+        const walkTime = rec.facility?.distance?.walking_time_minutes 
           ? `🚶 ${rec.facility.distance.walking_time_minutes} min` 
           : "";
-        const driveTime = rec.facility.distance.transit_time_minutes 
+        const driveTime = rec.facility?.distance?.transit_time_minutes 
           ? `🚗 ${rec.facility.distance.transit_time_minutes} min` 
           : "";
-        const price = rec.facility.pricing.cost === 0 
+        const price = rec.facility?.pricing?.cost === 0 
           ? "💰 Free" 
-          : rec.facility.pricing.cost === null
+          : rec.facility?.pricing?.cost === null || rec.facility?.pricing?.cost === undefined
             ? "💰 Price unknown" 
             : `💰 $${rec.facility.pricing.cost}`;
         
-        const openStatus = rec.facility.hours.open && rec.facility.hours.open !== "unknown"
+        const openStatus = rec.facility?.hours?.open && rec.facility.hours.open !== "unknown"
           ? `Open now: ${rec.facility.hours.open} - ${rec.facility.hours.close}`
           : "Hours unknown";
           
-        const amenitiesList = rec.facility.amenities && rec.facility.amenities.length > 0
+        const amenitiesList = rec.facility?.amenities && rec.facility.amenities.length > 0
           ? rec.facility.amenities.slice(0, 3).map(a => a.replace(/_/g, ' ')).join(' • ')
           : "";
           
-        const mapsLink = rec.facility.website && rec.facility.website !== "Unknown"
+        const mapsLink = rec.facility?.website && rec.facility.website !== "Unknown"
           ? `<div style="margin-top: 6px; border-top: 1px solid #f1f5f9; padding-top: 4px;"><a href="${rec.facility.website}" target="_blank" rel="noopener noreferrer" style="color: #2563eb; text-decoration: none; font-weight: bold; font-size: 0.7rem; display: inline-block;">Open in Maps →</a></div>`
           : "";
 
@@ -739,7 +806,8 @@ export default function App() {
       </section>
 
       {/* 3. DASHBOARD GRID (3 Columns: Form, Map, Vertical Workflow) */}
-      <div className="dashboard-grid">
+      <ErrorBoundary>
+        <div className="dashboard-grid">
         
         {/* Left Card: Trip Planner Form */}
         <div className="white-card">
@@ -1053,7 +1121,7 @@ export default function App() {
                         marginBottom: '2px',
                         whiteSpace: 'nowrap'
                       }}>
-                        🚶{rec.facility.distance.walking_time_minutes}m / 🚗{rec.facility.distance.transit_time_minutes}m
+                        🚶{rec.facility?.distance?.walking_time_minutes || 0}m / 🚗{rec.facility?.distance?.transit_time_minutes || 0}m
                       </div>
 
                       <div style={{
@@ -1142,6 +1210,7 @@ export default function App() {
         </div>
 
       </div>
+      </ErrorBoundary>
 
       {/* AI Concierge Summary Banner */}
       {showResults && recommendations.length > 0 && (
@@ -1271,7 +1340,8 @@ export default function App() {
 
       {/* 6. EXPANDED COMPACT TWO-COLUMN SELECTED FACILITY DETAIL VIEW */}
       {showResults && selectedRec && (
-        <div className="white-card">
+        <ErrorBoundary>
+          <div className="white-card">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', paddingBottom: '8px', borderBottom: '1px solid #e2e8f0' }}>
             <span style={{ fontSize: '1.2rem' }}>{selectedRec.rank === 1 ? "🏆" : selectedRec.rank === 2 ? "🥈" : "💰"}</span>
             <h2 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0, color: '#0f172a' }}>
@@ -1388,6 +1458,7 @@ export default function App() {
 
           </div>
         </div>
+        </ErrorBoundary>
       )}
 
     </div>
