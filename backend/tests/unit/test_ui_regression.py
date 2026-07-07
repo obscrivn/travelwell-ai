@@ -143,3 +143,30 @@ def test_live_results_hours_uniqueness_and_photos():
             os.environ["GOOGLE_MAPS_API_KEY"] = orig_key
         else:
             del os.environ["GOOGLE_MAPS_API_KEY"]
+
+
+def test_malformed_live_like_data_regression():
+    # missing name, missing address, unknown pricing
+    markdown = """
+### Recommendation Card: 
+- Address: 
+- Price: Price unknown
+- Distance: 15 min
+- Place ID: ChIJmalformed
+- Eligibility Status: Fits Your Criteria
+"""
+    recs = parse_markdown_to_recommendations(markdown, budget_sel="20", has_ymca=False, location_context="Skokie, IL")
+    assert len(recs) == 1
+    rec = recs[0]
+    
+    # 1. No undefined UI - name defaults to Facility name unavailable, address to location context
+    assert rec["name"] == "Facility name unavailable"
+    assert rec["address"] == "Skokie, IL"
+    
+    # 2. No verified day pass if pricing is unknown
+    assert rec["effective_price"] is None
+    assert rec["access_status"] in ["unknown", "membership_required", "rejected"]
+    
+    # 3. No best match if mandatory data missing (sets to Alternative/Rejected)
+    assert rec["eligibility_status"] != "Fits Your Criteria"
+    assert rec["validation_status"] != "passed"

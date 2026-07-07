@@ -142,7 +142,7 @@ def resolve_location(address: str) -> dict:
     return geocode_address(address)
 
 
-def parse_markdown_to_recommendations(markdown: str, budget_sel: str = "20", has_ymca: bool = False, memberships: list = None) -> list:
+def parse_markdown_to_recommendations(markdown: str, budget_sel: str = "20", has_ymca: bool = False, memberships: list = None, location_context: str = "") -> list:
     import re
     cards = re.split(r'### Recommendation Card:', markdown, flags=re.IGNORECASE)
     recommendations = []
@@ -154,12 +154,10 @@ def parse_markdown_to_recommendations(markdown: str, budget_sel: str = "20", has
             continue
             
         lines = card.split('\n')
-        first_line = lines[0].strip()
-        if not first_line:
-            continue
-            
-        facility_name = re.sub(r'^[#\s:]+', '', first_line).strip()
+        first_line = lines[0].strip() if lines else ""
+        facility_name = re.sub(r'^[#\s:]+', '', first_line).strip() if first_line else ""
         
+        data_warnings = []
         distance_str = ''
         price_str = ''
         eligibility_str = 'Fits Your Criteria'
@@ -375,7 +373,7 @@ def parse_markdown_to_recommendations(markdown: str, budget_sel: str = "20", has
                     if meta.get("facility_hours") and meta["facility_hours"] not in ["Hours unknown", "Hours unavailable"]:
                         resolved_facility_hours = meta["facility_hours"]
                         resolved_hours_summary = meta["facility_hours"]
-                    if meta.get("access_status"):
+                    if meta.get("access_status") and meta["access_status"] != "unknown":
                         access_status = meta["access_status"]
                     if meta.get("access_source"):
                         access_source = meta["access_source"]
@@ -388,65 +386,142 @@ def parse_markdown_to_recommendations(markdown: str, budget_sel: str = "20", has
             except Exception as e:
                 print(f"Error enriching recommendation card details: {e}")
 
+        # Rule 1: name/display_name normalization
+        places_name = None
+        if 'meta' in locals() and meta.get("name") and meta["name"] not in ["Local Gym", "Facility name unavailable"]:
+            places_name = meta["name"]
+        norm_name = places_name or facility_name
+        if not norm_name or not norm_name.strip() or norm_name == "undefined":
+            norm_name = "Facility name unavailable"
+            if "Facility name unavailable" not in data_warnings:
+                data_warnings.append("Facility name unavailable")
+
+        # Rule 2: address normalization
+        places_address = None
+        if 'meta' in locals() and meta.get("formatted_address") and meta["formatted_address"] != "Address unavailable":
+            places_address = meta["formatted_address"]
+        elif 'meta' in locals() and meta.get("vicinity") and meta["vicinity"] != "Address unavailable":
+            places_address = meta["vicinity"]
+            
+        norm_address = parsed_address or places_address
+        if not norm_address or norm_address in ["Address unavailable", "Unknown Address", "Unknown"]:
+            norm_address = location_context or "Address unavailable"
+
+        # Rule 3: travel minutes and display normalization
+        walk_minutes_val = None
+        drive_minutes_val = None
+        if walking_time is not None:
+            try:
+                walk_minutes_val = int(walking_time)
+                drive_minutes_val = int(drive_minutes)
+            except:
+                pass
+
+        # Rule 4: access/pricing state normalization
+        if pricing_status == "Price unknown" or effective_price is None:
+            if access_status == "verified_day_pass":
+                access_status = "unknown"
+
+        # Free-only budget requires effective_price = 0 and verified access
+        if budget_sel == "free":
+            if effective_price != 0.0 or access_status not in ["verified_member_access", "free_public_access"]:
+                clean_eligibility = "Rejected"
+                
+        # YMCA reciprocity only applies if facility is YMCA and user has YMCA membership
+        facility_name_lower = norm_name.lower()
+        if "ymca" in facility_name_lower:
+            has_active_ymca_membership = (memberships and any("ymca" in m.lower() for m in memberships)) or has_ymca
+            if not has_active_ymca_membership:
+                if effective_price == 0.0 or access_status == "verified_member_access":
+                    effective_price = 25.0
+                    day_pass_price = 25.0
+                    access_status = "verified_day_pass"
+                    pricing_status = "Paid"
+                    access_type = "day_pass"
+        else:
+            if access_status == "verified_member_access" and (memberships and "ymca" in [m.lower() for m in memberships]) and not any(brand in facility_name_lower for brand in ["planet fitness", "life time", "lifetime", "equinox", "ffc", "la fitness", "hotel gym"]):
+                effective_price = day_pass_price or 20.0
+                access_status = "verified_day_pass"
+                pricing_status = "Paid"
+                access_type = "day_pass"
+
+        # Planet Fitness, Life Time, Equinox, and similar membership clubs are not eligible unless matching membership or verified day pass exists
+        is_private_club = any(brand in facility_name_lower for brand in ["planet fitness", "life time", "lifetime", "equinox"])
+        if is_private_club:
+            has_matching_membership = False
+            for m in (memberships or []):
+                m_low = m.lower()
+                if "planet fitness" in m_low and "planet fitness" in facility_name_lower:
+                    has_matching_membership = True
+                elif ("life time" in m_low or "lifetime" in m_low) and ("life time" in facility_name_lower or "lifetime" in facility_name_lower):
+                    has_matching_membership = True
+                elif "equinox" in m_low and "equinox" in facility_name_lower:
+                    has_matching_membership = True
+            
+            if not has_matching_membership and access_status not in ["verified_day_pass", "free_public_access"]:
+                clean_eligibility = "Rejected"
+                access_status = "membership_required"
+                effective_price = None
+                pricing_status = "Price unknown"
+
+        # Rule 5: Policy agent final validation rules
+        if norm_name == "Facility name unavailable" or norm_address == "Address unavailable":
+            if clean_eligibility == "Fits Your Criteria":
+                clean_eligibility = "Alternative"
+                
+        if access_status == "unknown" or pricing_status == "Price unknown":
+            if budget_sel != "none":
+                if clean_eligibility == "Fits Your Criteria":
+                    clean_eligibility = "Alternative"
+
+        # Build card_summary consistently with normalized values
         card_summary = f"✓ Free" if effective_price == 0.0 else f"✓ ${effective_price}" if effective_price is not None else "✓ Price unknown"
-        card_summary += f" • {walking_time}-minute walk" + (f" • {resolved_hours_summary}" if resolved_hours_summary != "Hours unavailable" else "")
-        
+        if walk_minutes_val is not None:
+            card_summary += f" • {walk_minutes_val}-minute walk"
+        else:
+            card_summary += " • Travel unavailable"
+            
+        if resolved_hours_summary and resolved_hours_summary != "Hours unavailable" and resolved_hours_summary != "Hours unknown":
+            card_summary += f" • {resolved_hours_summary}"
+
+        # Update nested facility object too
+        facility["name"] = norm_name
+        facility["address"] = norm_address
+        facility["pricing"]["cost"] = effective_price
+        facility["pricing"]["pass_detail"] = price_str or (f"${effective_price} Day Pass" if effective_price is not None else "Price unknown")
+        facility["distance"]["walking_time_minutes"] = walk_minutes_val
+        facility["distance"]["transit_time_minutes"] = drive_minutes_val
+        facility["distance"]["description"] = distance_str or (f"{walk_minutes_val} min walk" if walk_minutes_val is not None else "Travel unavailable")
+        facility["emoji_badges"] = ["🏊 Pool", "🏃 Treadmill", "🚿 Showers", "🔒 Lockers"] if is_mccormick or "ymca" in norm_name.lower() else ["🏃 Treadmill", "🚿 Showers", "🔒 Lockers"]
+
         recommendation_entry = {
-            # Canonical Fields
             "id": facility_id,
             "place_id": parsed_place_id or f"place_{rank}",
-            "name": facility_name,
-            "address": parsed_address or "Address unavailable",
+            "name": norm_name,
+            "display_name": norm_name,
+            "address": norm_address,
+            "formatted_address": norm_address,
             "coordinates": parsed_coords or {"lat": 41.8817, "lng": -87.6278},
             "rating": 4.5,
-            "user_ratings_total": 120,
-            "website": parsed_website or parsed_maps_url or "Unknown Website",
-            "phone_number": parsed_phone or "Unknown Phone",
-            "google_maps_url": parsed_maps_url or "https://maps.google.com",
-            "official_website_url": parsed_website or "Unknown Website",
-            "formatted_address": parsed_address or "Address unavailable",
-            "facility_hours": resolved_facility_hours,
-            "pool_hours": "Monday-Friday: 7 AM - 8 PM, Saturday-Sunday: 8 AM - 6 PM" if is_mccormick else "Pool hours unknown",
-            "amenity_evidence": "Indoor pool, treadmills, showers, parking identified on official McCormick YMCA site." if is_mccormick else "Discovery details only.",
-            
-            # Source Tracking
-            "address_source": "official_site" if is_mccormick else "google_places",
-            "phone_source": "official_site" if is_mccormick else "google_places",
-            "hours_source": "official_site" if is_mccormick else "google_places",
-            "amenities_source": "official_site" if is_mccormick else "google_places",
-            "pricing_source": "official_site" if is_mccormick else "google_places",
-            
-            # Confidence Levels
-            "address_confidence": "high" if is_mccormick else "medium",
-            "phone_confidence": "high" if is_mccormick else "medium",
-            "hours_confidence": "high" if is_mccormick else "medium",
-            "amenities_confidence": "high" if is_mccormick else "medium",
-            "pricing_confidence": "high" if is_mccormick else "medium",
-            
-            "photo_url": photo_url,
-            "photo_source": photo_source,
-            "amenities": [],
-            "required_constraints": ["budget", "membership"] if clean_eligibility == "Fits Your Criteria" else [],
-            "preferred_amenities": [],
-            "walk_minutes": walking_time,
-            "drive_minutes": drive_minutes,
+            "walk_minutes": walk_minutes_val,
+            "drive_minutes": drive_minutes_val,
             "distance_miles": distance_miles,
-            "day_pass_price": day_pass_price,
             "effective_price": effective_price,
+            "day_pass_price": day_pass_price,
             "pricing_status": pricing_status,
-            "access_type": access_type,
             "access_status": access_status,
-            "access_source": access_source,
-            "pricing_source": pricing_source,
-            "membership_evidence": membership_evidence,
-            "access_warnings": access_warnings,
+            "access_type": access_type,
             "is_open_now": False if "closed" in resolved_hours_summary.lower() else True,
             "opening_hours_summary": resolved_hours_summary,
+            "amenities": [],
+            "website": parsed_website or parsed_maps_url or "Unknown Website",
+            "google_maps_url": parsed_maps_url or "https://maps.google.com",
+            "official_website_url": parsed_website or "Unknown Website",
             "validation_status": "passed" if clean_eligibility == "Fits Your Criteria" else "warning" if clean_eligibility == "Alternative" else "failed",
             "eligibility_status": clean_eligibility,
             "confidence": 1.0 if clean_eligibility == "Fits Your Criteria" else 0.7 if clean_eligibility == "Alternative" else 0.3,
             "explanation": rationale or "Meets constraint criteria.",
-            "data_warnings": ["Unverified pricing"] if effective_price is None else [],
+            "data_warnings": data_warnings,
             
             # Backward Compatibility Fields
             "facility": facility,
@@ -573,7 +648,7 @@ async def recommend_workout(request: Request):
                 yield f"data: {json.dumps(event_dict)}\n\n"
                 
             # Stream final structured output
-            recommendations = parse_markdown_to_recommendations(full_markdown_text, budget_sel=budget_sel, has_ymca=has_ymca, memberships=memberships)
+            recommendations = parse_markdown_to_recommendations(full_markdown_text, budget_sel=budget_sel, has_ymca=has_ymca, memberships=memberships, location_context=location)
             
             data_warnings = []
             if not recommendations:

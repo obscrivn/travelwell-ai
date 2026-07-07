@@ -82,6 +82,11 @@ export interface Recommendation {
   opening_hours_summary?: string;
   is_open_now?: boolean;
   pool_hours?: string;
+  facility_hours?: string;
+  display_name?: string;
+  validation_status?: string;
+  confidence?: number;
+  explanation?: string;
   access_status?: 
     | "verified_member_access"
     | "verified_day_pass"
@@ -474,15 +479,15 @@ function GoogleMapComponent({ apiKey, recommendations, selectedId, onSelectId, s
         const marker = new window.google.maps.Marker({
           position: coords,
           map: mapInstanceRef.current,
-          title: rec.name,
+          title: rec.name || rec.facility?.name || "Facility name unavailable",
           icon: isSelected 
             ? "http://maps.google.com/mapfiles/ms/icons/blue-dot.png" 
             : "http://maps.google.com/mapfiles/ms/icons/green-dot.png"
         });
 
         const ratingVal = rec.rating || 4.5;
-        const walkTimeVal = rec.walk_minutes || 15;
-        const driveTimeVal = rec.drive_minutes || 4;
+        const walkTimeVal = rec.walk_minutes !== undefined ? rec.walk_minutes : rec.facility?.distance?.walking_time_minutes;
+        const driveTimeVal = rec.drive_minutes !== undefined ? rec.drive_minutes : rec.facility?.distance?.transit_time_minutes;
         
         let priceLabel = "Price unknown";
         if (rec.effective_price === 0) {
@@ -498,7 +503,7 @@ function GoogleMapComponent({ apiKey, recommendations, selectedId, onSelectId, s
         const showerBadge = rec.amenities?.includes('showers') || rec.facility?.amenities?.includes('showers') || rec.facility?.emoji_badges?.some((b: string) => b.toLowerCase().includes('shower')) ? "🚿 Showers" : "";
         const popupAmenities = [poolBadge, showerBadge].filter(Boolean).join(" • ");
         
-        const popupHours = rec.opening_hours_summary ? rec.opening_hours_summary : `Open until ${rec.facility?.hours?.close || "10 PM"}`;
+        const popupHours = rec.opening_hours_summary || rec.facility_hours || (rec.facility?.hours?.close ? `Open until ${rec.facility?.hours?.close}` : "Hours unavailable");
         
         // Construct Google Maps URL following rules
         let mapsUrl = rec.google_maps_url;
@@ -510,13 +515,14 @@ function GoogleMapComponent({ apiKey, recommendations, selectedId, onSelectId, s
           }
         }
 
+        const nameVal = rec.name || rec.facility?.name || "Facility name unavailable";
         const contentString = `
           <div style="font-family: system-ui, -apple-system, sans-serif; color: #1e293b; padding: 6px; min-width: 180px; line-height: 1.45;">
-            <div style="font-weight: 800; font-size: 0.85rem; margin-bottom: 2px; color: #0f172a;" class="map-popup-title">${rec.name}</div>
+            <div style="font-weight: 800; font-size: 0.85rem; margin-bottom: 2px; color: #0f172a;" class="map-popup-title">${nameVal}</div>
             <div style="font-size: 0.7rem; color: #64748b; margin-bottom: 4px; display: flex; gap: 4px; align-items: center; font-weight: 500;">
               <span>⭐ ${ratingVal}</span>
-              <span>• 🚶 ${walkTimeVal} min</span>
-              <span>• 🚗 ${driveTimeVal} min</span>
+              <span>• 🚶 ${walkTimeVal !== null && walkTimeVal !== undefined ? `${walkTimeVal} min` : "Travel unavailable"}</span>
+              <span>• 🚗 ${driveTimeVal !== null && driveTimeVal !== undefined ? `${driveTimeVal} min` : "Travel unavailable"}</span>
             </div>
             <div style="font-size: 0.72rem; font-weight: 700; color: #1e3a8a; margin-bottom: 4px;" class="map-popup-price">💰 ${priceLabel}</div>
             ${popupAmenities ? `<div style="font-size: 0.68rem; color: #475569; margin-bottom: 4px; font-weight: 500;">${popupAmenities}</div>` : ""}

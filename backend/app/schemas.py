@@ -77,6 +77,34 @@ class TraceEvent(BaseModel):
     progress: int
     message: str
 
+class FacilityRecommendation(BaseModel):
+    id: str
+    place_id: str
+    name: str
+    display_name: str
+    address: str
+    formatted_address: str
+    coordinates: dict
+    rating: float
+    walk_minutes: Optional[int] = None
+    drive_minutes: Optional[int] = None
+    distance_miles: Optional[float] = None
+    effective_price: Optional[float] = None
+    day_pass_price: Optional[float] = None
+    pricing_status: str
+    access_status: str
+    access_type: str
+    is_open_now: bool
+    opening_hours_summary: str
+    amenities: List[str] = Field(default_factory=list)
+    google_maps_url: str
+    official_website_url: str
+    validation_status: str
+    eligibility_status: str
+    confidence: float
+    explanation: str
+    data_warnings: List[str] = Field(default_factory=list)
+
 class ConciergeResponse(BaseModel):
     trip_profile: TripProfile
     recommendations: List[RecommendedFacility]
