@@ -695,18 +695,29 @@ export default function App() {
 
   const buildRecommendationSummary = (recs: Recommendation[], noSatisfies: boolean) => {
     if (recs.length === 0) return "";
-    if (noSatisfies) {
-      return "I could not find a perfect match, but I found the closest alternatives based on your preferences.";
+    
+    // Count how many actually passed validation
+    const matchingRecs = recs.filter(r => r.eligibility_status === "Fits Your Criteria" || r.validation_status === "passed");
+    const isFreeOnly = budgetSelection === "free";
+    
+    if (matchingRecs.length === 0 || noSatisfies) {
+      if (isFreeOnly) {
+        return "No verified free option found. Showing closest alternatives.";
+      }
+      return "No option satisfies all mandatory constraints. Showing closest alternatives.";
     }
-    const topMatch = recs[0];
-    const costText = topMatch.facility.pricing.cost === 0 
+    
+    const topMatch = matchingRecs[0];
+    const cost = topMatch.effective_price !== undefined ? topMatch.effective_price : topMatch.facility?.pricing?.cost;
+    const costText = cost === 0 
       ? "is free" 
-      : topMatch.facility.pricing.cost === null
+      : cost === null || cost === undefined
         ? "has unverified pricing"
-        : `costs $${topMatch.facility.pricing.cost}`;
-    const walkTime = topMatch.facility.distance.walking_time_minutes;
+        : `costs $${cost}`;
+    const walkTime = topMatch.walk_minutes !== null && topMatch.walk_minutes !== undefined ? topMatch.walk_minutes : topMatch.facility?.distance?.walking_time_minutes;
+    const nameVal = topMatch.name || topMatch.facility?.name || "Facility";
 
-    return `I found ${recs.length} spaces matching your selections. ${topMatch.facility.name} is your top match because it ${costText}, is only a ${walkTime}-minute walk away, and satisfies your requirements.`;
+    return `I found ${matchingRecs.length} spaces matching your selections. ${nameVal} is your top match because it ${costText}, is only a ${walkTime}-minute walk away, and satisfies your requirements.`;
   };
 
   const handleSearchSubmit = async (e: React.FormEvent) => {

@@ -157,6 +157,22 @@ def parse_markdown_to_recommendations(markdown: str, budget_sel: str = "20", has
         first_line = lines[0].strip() if lines else ""
         facility_name = re.sub(r'^[#\s:]+', '', first_line).strip() if first_line else ""
         
+        name_lower = facility_name.lower()
+        is_narrative = (
+            len(facility_name) > 60 or
+            "based on" in name_lower or
+            "meets your" in name_lower or
+            "top match" in name_lower or
+            "satisfies" in name_lower or
+            "recommendation" in name_lower or
+            "your profile" in name_lower or
+            "i recommend" in name_lower or
+            "selected the" in name_lower or
+            "found" in name_lower
+        )
+        if is_narrative:
+            facility_name = ""
+            
         data_warnings = []
         distance_str = ''
         price_str = ''
@@ -250,6 +266,9 @@ def parse_markdown_to_recommendations(markdown: str, budget_sel: str = "20", has
         # 2. Determine effective price and access type semantically
         effective_price = day_pass_price
         access_type = "day_pass"
+        access_status = "unknown"
+        if day_pass_price is not None and day_pass_price > 0.0:
+            access_status = "verified_day_pass"
         
         is_ymca = "ymca" in facility_name.lower()
         if has_ymca and is_ymca:
@@ -257,9 +276,11 @@ def parse_markdown_to_recommendations(markdown: str, budget_sel: str = "20", has
             access_type = "membership_reciprocity"
             pricing_status = "Free with YMCA Reciprocity"
             price_str = "FREE Reciprocity"
+            access_status = "verified_member_access"
         elif day_pass_price == 0.0:
             access_type = "free_trial"
             pricing_status = "Free"
+            access_status = "free_public_access"
             
         # 3. Apply semantic budget filtering rules
         if budget_sel == "free" and effective_price is not None and effective_price > 0.0:
@@ -344,7 +365,7 @@ def parse_markdown_to_recommendations(markdown: str, budget_sel: str = "20", has
         enrich_id = parsed_place_id or facility_id
         photo_url = ""
         photo_source = "placeholder"
-        access_status = "unknown"
+        access_status = locals().get("access_status", "unknown")
         access_source = "google_places"
         pricing_source = "google_places"
         membership_evidence = "No membership evidence verified."
@@ -392,9 +413,8 @@ def parse_markdown_to_recommendations(markdown: str, budget_sel: str = "20", has
             places_name = meta["name"]
         norm_name = places_name or facility_name
         if not norm_name or not norm_name.strip() or norm_name == "undefined":
-            norm_name = "Facility name unavailable"
-            if "Facility name unavailable" not in data_warnings:
-                data_warnings.append("Facility name unavailable")
+            # Skip fake cards to avoid rendering prose as facility cards
+            continue
 
         # Rule 2: address normalization
         places_address = None
@@ -469,7 +489,7 @@ def parse_markdown_to_recommendations(markdown: str, budget_sel: str = "20", has
             if clean_eligibility == "Fits Your Criteria":
                 clean_eligibility = "Alternative"
                 
-        if access_status == "unknown" or pricing_status == "Price unknown":
+        if access_status == "unknown" or pricing_status == "Price unknown" or effective_price is None or (effective_price is not None and effective_price > 0.0 and budget_sel == "free"):
             if budget_sel != "none":
                 if clean_eligibility == "Fits Your Criteria":
                     clean_eligibility = "Alternative"

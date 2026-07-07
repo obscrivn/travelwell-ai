@@ -30,10 +30,42 @@ def search_places(location: str, budget: float) -> Dict[str, Any]:
     if key:
         resolved = geocode_address(location)
         search_query = resolved.get("formatted_address") or location
-        places = search_places_live(search_query)
-        if places:
+        
+        # Gather candidates from multiple search queries to prioritize YMCA
+        all_places = []
+        seen_place_ids = set()
+        
+        # Query list based on user context
+        queries_to_run = [("gyms", search_query), ("ymca", search_query)]
+        if "skokie" in location.lower():
+            queries_to_run.extend([
+                ("skokie_ymca", search_query),
+                ("mcgaw", search_query),
+                ("evanston_ymca", search_query)
+            ])
+            
+        for q_type, q_loc in queries_to_run:
+            results = search_places_live(q_loc, query_type=q_type) or []
+            for p in results:
+                if p["place_id"] not in seen_place_ids:
+                    seen_place_ids.add(p["place_id"])
+                    all_places.append(p)
+                    
+        # Prioritize YMCA/recreation centers first
+        ymca_places = []
+        other_places = []
+        for p in all_places:
+            p_name_lower = p["name"].lower()
+            if "ymca" in p_name_lower or "recreation" in p_name_lower or "rec center" in p_name_lower:
+                ymca_places.append(p)
+            else:
+                other_places.append(p)
+                
+        sorted_places = ymca_places + other_places
+        
+        if sorted_places:
             facilities = []
-            for p in places:
+            for p in sorted_places[:8]: # Return 5-8 candidates (max 8)
                 loc = (p.get("geometry") or {}).get("location") or {}
                 lat = loc.get("lat") or resolved.get("lat") or 41.8817
                 lng = loc.get("lng") or resolved.get("lng") or -87.6278

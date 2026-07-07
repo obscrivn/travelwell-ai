@@ -146,7 +146,7 @@ def test_live_results_hours_uniqueness_and_photos():
 
 
 def test_malformed_live_like_data_regression():
-    # missing name, missing address, unknown pricing
+    # missing name, missing address, unknown pricing -> card skipped to prevent fake recommendations from narrative prose
     markdown = """
 ### Recommendation Card: 
 - Address: 
@@ -156,17 +156,56 @@ def test_malformed_live_like_data_regression():
 - Eligibility Status: Fits Your Criteria
 """
     recs = parse_markdown_to_recommendations(markdown, budget_sel="20", has_ymca=False, location_context="Skokie, IL")
-    assert len(recs) == 1
-    rec = recs[0]
+    assert len(recs) == 0
+
+
+def test_skokie_ymca_free_only_regression():
+    # Input: location: Residence Inn, Skokie IL, active YMCA membership, free only, requires showers
+    from app.tools.facility_tools import search_places
+    import os
+    orig_key = os.environ.get("GOOGLE_MAPS_API_KEY", "")
+    os.environ["GOOGLE_MAPS_API_KEY"] = "fake_key"
+    try:
+        # Check search execution
+        res = search_places("Residence Inn Skokie IL", budget=0.0)
+        assert res["status"] == "success"
+    finally:
+        if orig_key:
+            os.environ["GOOGLE_MAPS_API_KEY"] = orig_key
+        else:
+            del os.environ["GOOGLE_MAPS_API_KEY"]
+
+    markdown = """
+Based on your requirements, McGaw YMCA is your top match because it is free with your YMCA membership.
+### Recommendation Card: McGaw YMCA
+- Address: 1420 Maple Ave, Evanston, IL 60201
+- Price: 💰 $0 YMCA Reciprocity
+- Distance: 🚶 12 min
+- Place ID: ChIJmcgaw_ymca
+- Eligibility Status: Fits Your Criteria
+
+### Recommendation Card: Anytime Fitness
+- Address: 4811 Dempser St, Skokie, IL 60077
+- Price: 💰 $20 Day Pass
+- Distance: 🚶 8 min
+- Place ID: ChIJanytime
+- Eligibility Status: Fits Your Criteria
+
+### Recommendation Card: 
+Based on your requirements, the YMCA is the best option.
+"""
+    recs = parse_markdown_to_recommendations(markdown, budget_sel="free", has_ymca=True, memberships=["YMCA"], location_context="Residence Inn Skokie IL")
     
-    # 1. No undefined UI - name defaults to Facility name unavailable, address to location context
-    assert rec["name"] == "Facility name unavailable"
-    assert rec["address"] == "Skokie, IL"
+    # Expected:
+    # 1. No narrative text appears as facility name (the 3rd card contains narrative text and no name, so it is skipped)
+    assert len(recs) == 2
     
-    # 2. No verified day pass if pricing is unknown
-    assert rec["effective_price"] is None
-    assert rec["access_status"] in ["unknown", "membership_required", "rejected"]
+    # 2. McGaw YMCA is YMCA and user has YMCA membership reciprocity, so effective_price = 0.0, eligibility = Fits Your Criteria
+    assert recs[0]["name"] == "McGaw YMCA"
+    assert recs[0]["effective_price"] == 0.0
+    assert recs[0]["eligibility_status"] == "Fits Your Criteria"
     
-    # 3. No best match if mandatory data missing (sets to Alternative/Rejected)
-    assert rec["eligibility_status"] != "Fits Your Criteria"
-    assert rec["validation_status"] != "passed"
+    # 3. Anytime Fitness is paid ($20) and budget selection is free, so eligibility MUST be demoted/rejected
+    assert recs[1]["name"] == "Anytime Fitness"
+    assert recs[1]["effective_price"] == 20.0
+    assert recs[1]["eligibility_status"] in ["Alternative", "Rejected"]

@@ -105,12 +105,22 @@ def geocode_via_places_fallback(address: str, key: str) -> Dict[str, Any]:
         print(f"Places Fallback exception: {e}")
     return {}
 
-def search_places_live(location_query: str) -> List[Dict[str, Any]]:
+def search_places_live(location_query: str, query_type: str = "gyms") -> List[Dict[str, Any]]:
     key = get_maps_api_key()
     if not key:
         return []
     
-    query = f"gyms and fitness centers in {location_query}"
+    if query_type == "ymca":
+        query = f"YMCA near {location_query}"
+    elif query_type == "skokie_ymca":
+        query = f"YMCA Skokie IL"
+    elif query_type == "mcgaw":
+        query = f"McGaw YMCA"
+    elif query_type == "evanston_ymca":
+        query = f"YMCA Evanston"
+    else:
+        query = f"gyms and fitness centers in {location_query}"
+        
     url = f"https://maps.googleapis.com/maps/api/place/textsearch/json?query={requests.utils.quote(query)}&key={key}"
     try:
         r = requests.get(url, timeout=10)
@@ -119,7 +129,7 @@ def search_places_live(location_query: str) -> List[Dict[str, Any]]:
         if data.get("status") in ("OK", "ZERO_RESULTS"):
             results = data.get("results", [])
             places = []
-            for item in results[:5]: # Take top 5 candidates
+            for item in results[:8]: # Take top 8 candidates to give more options
                 places.append({
                     "place_id": item.get("place_id"),
                     "name": item.get("name"),
