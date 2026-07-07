@@ -97,6 +97,8 @@ class FacilityRecommendation(BaseModel):
     is_open_now: bool
     opening_hours_summary: str
     amenities: List[str] = Field(default_factory=list)
+    amenity_states: Optional[dict] = Field(default_factory=dict)
+    amenity_sources: Optional[dict] = Field(default_factory=dict)
     google_maps_url: str
     official_website_url: str
     validation_status: str

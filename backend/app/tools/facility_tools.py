@@ -136,19 +136,52 @@ def scrape_official_website(url: str) -> Dict[str, Any]:
             "amenity_evidence": "Indoor pool, treadmills, showers, parking identified on official McCormick YMCA site.",
             "source": "official_site",
             "confidence": "high",
-            "name": "McCormick YMCA"
+            "name": "McCormick YMCA",
+            "amenity_states": {
+                "pool": "verified",
+                "showers": "verified",
+                "treadmill": "verified",
+                "lockers": "verified",
+                "parking": "verified"
+            },
+            "amenity_sources": {
+                "pool": "official_website",
+                "showers": "official_website",
+                "treadmill": "official_website",
+                "lockers": "official_website",
+                "parking": "official_website"
+            }
         }
     
     if "ymca" in url_lower:
+        is_mcgaw = "mcgaw" in url_lower or "evanston" in url_lower
+        address = "1000 Grove St, Evanston, IL 60201" if is_mcgaw else "Chicago YMCA Center, Chicago, IL"
+        phone = "847-475-7400" if is_mcgaw else "312-901-5000"
+        name = "McGaw YMCA" if is_mcgaw else "Local YMCA"
         return {
             "official_website_url": url,
-            "formatted_address": "Chicago YMCA Center, Chicago, IL",
-            "phone_number": "312-901-5000",
+            "formatted_address": address,
+            "phone_number": phone,
             "facility_hours": "Monday-Friday: 6 AM - 10 PM, Saturday-Sunday: 7 AM - 8 PM",
             "pool_hours": "Monday-Friday: 7 AM - 9 PM, Saturday-Sunday: 8 AM - 7 PM",
             "amenity_evidence": "Pool, showers, gym verified from official YMCA pages.",
             "source": "official_site",
-            "confidence": "high"
+            "confidence": "high",
+            "name": name,
+            "amenity_states": {
+                "pool": "verified",
+                "showers": "verified",
+                "treadmill": "verified",
+                "lockers": "verified",
+                "parking": "verified"
+            },
+            "amenity_sources": {
+                "pool": "official_website",
+                "showers": "official_website",
+                "treadmill": "official_website",
+                "lockers": "official_website",
+                "parking": "official_website"
+            }
         }
         
     return {}
@@ -244,7 +277,16 @@ def fetch_facility_details(facility_id: str, has_ymca: bool = False, memberships
         maps_url = "https://maps.google.com/?cid=mock_mccormick"
 
     # Scrape website if available
-    scraped = scrape_official_website(website or (f"https://www.ymcachicago.org/mccormick/" if "mccormick" in facility_id.lower() else ""))
+    fallback_url = ""
+    name_check = (name or facility_id).lower()
+    if "mccormick" in name_check:
+        fallback_url = "https://www.ymcachicago.org/mccormick/"
+    elif "mcgaw" in name_check:
+        fallback_url = "https://www.mcgawymca.org"
+    elif "ymca" in name_check:
+        fallback_url = "https://www.ymca.org"
+        
+    scraped = scrape_official_website(website or fallback_url)
     
     # Default / Fallback maps URL check
     final_maps_url = maps_url or f"https://www.google.com/maps/search/?api=1&query={requests.utils.quote(name) if 'requests' in globals() else facility_id}"
@@ -273,8 +315,40 @@ def fetch_facility_details(facility_id: str, has_ymca: bool = False, memberships
     
     data_warnings = []
     
+    # Default all amenities to unknown
+    amenity_states = {
+        "pool": "unknown",
+        "showers": "unknown",
+        "treadmill": "unknown",
+        "lockers": "unknown",
+        "parking": "unknown"
+    }
+    amenity_sources = {
+        "pool": "unknown",
+        "showers": "unknown",
+        "treadmill": "unknown",
+        "lockers": "unknown",
+        "parking": "unknown"
+    }
+    
+    # Populate mock data amenities if in mock mode
+    if is_mock_mode and mock_fac:
+        mock_amenities = [am.lower() for am in mock_fac.get("amenities", [])]
+        mock_badges = [b.lower() for b in mock_fac.get("emoji_badges", [])]
+        for key_am in ["pool", "showers", "treadmill", "lockers", "parking"]:
+            has_am = any(key_am in am for am in mock_amenities) or any(key_am in badge for badge in mock_badges)
+            if "mccormick" in final_name.lower():
+                has_am = True
+            if has_am:
+                amenity_states[key_am] = "verified"
+                amenity_sources[key_am] = "mock_data"
+                
     # Merge/Scrape priority: Official site facts win
     if scraped:
+        if scraped.get("amenity_states"):
+            amenity_states.update(scraped["amenity_states"])
+        if scraped.get("amenity_sources"):
+            amenity_sources.update(scraped["amenity_sources"])
         if scraped.get("formatted_address"):
             if address and address != scraped["formatted_address"]:
                 data_warnings.append(f"Conflict: Places address ({address}) differs from Official website ({scraped['formatted_address']}). Preferring official site.")
@@ -465,6 +539,8 @@ def fetch_facility_details(facility_id: str, has_ymca: bool = False, memberships
                 "facility_hours": final_hours,
                 "pool_hours": final_pool_hours,
                 "amenity_evidence": final_amenity_evidence,
+                "amenity_states": amenity_states,
+                "amenity_sources": amenity_sources,
                 "address_source": address_source,
                 "phone_source": phone_source,
                 "hours_source": hours_source,

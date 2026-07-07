@@ -85,12 +85,16 @@ This is a strict compliance auditing step. Do not execute any tool calls.
 Instructions:
 1. Verify all mandatory constraints: memberships, budget cap, required amenities, hours, and travel window.
 2. Check for contradictions (e.g. recommending YMCA as free without membership, budget cap exceeded, required amenities missing).
-3. Produce a structured validation report for each facility with satisfied_constraints, violated_constraints, unknown_constraints, recommendation_confidence, eligibility_status, and validation_summary.
-4. If a constraint is violated, state the violation clearly. Use "Fits Your Criteria" (replaces 'Eligible') if all constraints match, otherwise "Alternative" or "Rejected".
-5. If the highest-ranked option violates mandatory constraints, demote it and promote the next valid recommendation.
-6. If no recommendation satisfies all mandatory constraints, begin your response with: "No option satisfies all mandatory constraints." and list closest alternatives and violations.
-7. Remove internal implementation metrics: DO NOT display numeric scores (e.g. 9.5/10) or confidence levels.
-8. Structure the output exactly like this:
+3. Distinguish between three states for amenities:
+   - Verified Present (✅): confirmed present in facility data or official site.
+   - Unknown / Not Verified (❓): no explicit evidence in research data. Do NOT treat missing evidence as evidence of absence. Never reject a recommendation solely because an amenity is unknown.
+   - Verified Unavailable (❌): trusted source explicitly confirms the amenity is missing/unavailable.
+4. Produce a structured validation report for each facility with satisfied_constraints, violated_constraints, unknown_constraints, recommendation_confidence, eligibility_status, and validation_summary.
+5. If a constraint is verified violated, state the violation clearly. Use "Fits Your Criteria" (replaces 'Eligible') if all constraints match (or are unknown), otherwise "Alternative" or "Rejected" (only reject if explicitly violated, not unknown).
+6. If the highest-ranked option violates mandatory constraints, demote it and promote the next valid recommendation.
+7. If no recommendation satisfies all mandatory constraints, begin your response with: "No option satisfies all mandatory constraints." and list closest alternatives and violations.
+8. Remove internal implementation metrics: DO NOT display numeric scores (e.g. 9.5/10) or confidence levels.
+9. Structure the output exactly like this:
 
 ### Recommendation Card: [Facility Name]
 - Rating: [e.g. ⭐⭐⭐⭐ or 4.5/5]
@@ -108,8 +112,8 @@ Instructions:
 
 #### Constraint Satisfaction
 - ✅ Budget ≤ $[value]
-- ✅ Showers
-- ❌ Free Parking (use '❌ Free Parking' if free parking is not identified in the available facility data)
+- ✅ Showers (or ❓ Showers (not verified) if not found, or ❌ Showers if explicitly confirmed unavailable)
+- ❓ Free Parking (not verified) (or ✅ Free Parking if confirmed, ❌ Free Parking if explicitly confirmed unavailable)
 - ✅ Fits Time Window
 
 #### Why this recommendation?

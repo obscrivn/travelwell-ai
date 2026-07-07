@@ -205,6 +205,14 @@ Based on your requirements, the YMCA is the best option.
     assert recs[0]["effective_price"] == 0.0
     assert recs[0]["eligibility_status"] == "Fits Your Criteria"
     
+    # Assert amenity states for McGaw YMCA (should be verified from official site)
+    assert recs[0]["amenity_states"]["pool"] == "verified"
+    assert recs[0]["amenity_states"]["showers"] == "verified"
+    assert recs[0]["amenity_states"]["treadmill"] == "verified"
+    assert recs[0]["amenity_sources"]["pool"] == "official_website"
+    assert recs[0]["amenity_sources"]["showers"] == "official_website"
+    assert recs[0]["amenity_sources"]["treadmill"] == "official_website"
+    
     # 3. Anytime Fitness is paid ($20) and budget selection is free, so eligibility MUST be demoted/rejected
     assert recs[1]["name"] == "Anytime Fitness"
     assert recs[1]["effective_price"] == 20.0

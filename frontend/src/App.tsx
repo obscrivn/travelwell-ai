@@ -97,6 +97,8 @@ export interface Recommendation {
   access_source?: string;
   membership_evidence?: string;
   access_warnings?: string[];
+  amenity_states?: Record<string, "verified" | "unknown" | "unavailable">;
+  amenity_sources?: Record<string, string>;
 }
 
 interface ErrorBoundaryProps {
@@ -1541,21 +1543,45 @@ export default function App() {
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                  <div className={`satisfied-chip ${(selectedRec.amenities?.includes('pool') || selectedRec.facility?.amenities?.includes('pool')) ? 'yes' : 'no'}`}>
-                    <span>{(selectedRec.amenities?.includes('pool') || selectedRec.facility?.amenities?.includes('pool')) ? '✅' : '❌'}</span>
-                    <span>Indoor pool</span>
+                  <div className={`satisfied-chip ${
+                    selectedRec.amenity_states?.pool === 'verified' ? 'yes' : 
+                    selectedRec.amenity_states?.pool === 'unavailable' ? 'no' : 'unknown'
+                  }`}>
+                    <span>{
+                      selectedRec.amenity_states?.pool === 'verified' ? '✅' : 
+                      selectedRec.amenity_states?.pool === 'unavailable' ? '❌' : '❓'
+                    }</span>
+                    <span>Indoor pool {selectedRec.amenity_states?.pool === 'unknown' && ' (not verified)'}</span>
                   </div>
-                  <div className={`satisfied-chip ${(selectedRec.amenities?.includes('treadmill') || selectedRec.facility?.amenities?.includes('treadmill')) ? 'yes' : 'no'}`}>
-                    <span>{(selectedRec.amenities?.includes('treadmill') || selectedRec.facility?.amenities?.includes('treadmill')) ? '✅' : '❌'}</span>
-                    <span>Treadmill</span>
+                  <div className={`satisfied-chip ${
+                    selectedRec.amenity_states?.treadmill === 'verified' ? 'yes' : 
+                    selectedRec.amenity_states?.treadmill === 'unavailable' ? 'no' : 'unknown'
+                  }`}>
+                    <span>{
+                      selectedRec.amenity_states?.treadmill === 'verified' ? '✅' : 
+                      selectedRec.amenity_states?.treadmill === 'unavailable' ? '❌' : '❓'
+                    }</span>
+                    <span>Treadmill {selectedRec.amenity_states?.treadmill === 'unknown' && ' (not verified)'}</span>
                   </div>
-                  <div className={`satisfied-chip ${(selectedRec.amenities?.includes('showers') || selectedRec.facility?.amenities?.includes('showers')) ? 'yes' : 'no'}`}>
-                    <span>{(selectedRec.amenities?.includes('showers') || selectedRec.facility?.amenities?.includes('showers')) ? '✅' : '❌'}</span>
-                    <span>Showers</span>
+                  <div className={`satisfied-chip ${
+                    selectedRec.amenity_states?.showers === 'verified' ? 'yes' : 
+                    selectedRec.amenity_states?.showers === 'unavailable' ? 'no' : 'unknown'
+                  }`}>
+                    <span>{
+                      selectedRec.amenity_states?.showers === 'verified' ? '✅' : 
+                      selectedRec.amenity_states?.showers === 'unavailable' ? '❌' : '❓'
+                    }</span>
+                    <span>Showers {selectedRec.amenity_states?.showers === 'unknown' && ' (not verified)'}</span>
                   </div>
-                  <div className={`satisfied-chip ${(selectedRec.amenities?.includes('parking') || selectedRec.facility?.amenities?.includes('parking')) ? 'yes' : 'no'}`}>
-                    <span>{(selectedRec.amenities?.includes('parking') || selectedRec.facility?.amenities?.includes('parking')) ? '✅' : '❌'}</span>
-                    <span>Free parking {!(selectedRec.amenities?.includes('parking') || selectedRec.facility?.amenities?.includes('parking')) && "(not identified in facility data)"}</span>
+                  <div className={`satisfied-chip ${
+                    selectedRec.amenity_states?.parking === 'verified' ? 'yes' : 
+                    selectedRec.amenity_states?.parking === 'unavailable' ? 'no' : 'unknown'
+                  }`}>
+                    <span>{
+                      selectedRec.amenity_states?.parking === 'verified' ? '✅' : 
+                      selectedRec.amenity_states?.parking === 'unavailable' ? '❌' : '❓'
+                    }</span>
+                    <span>Free parking {selectedRec.amenity_states?.parking === 'unknown' && ' (not verified)'}</span>
                   </div>
                 </div>
               </div>

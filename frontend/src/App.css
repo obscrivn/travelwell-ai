@@ -513,6 +513,12 @@ body {
   border-color: #fee2e2;
 }
 
+.satisfied-chip.unknown {
+  color: #ca8a04;
+  background: #fef9c3;
+  border-color: #fef08a;
+}
+
 /* Action Buttons in Info */
 .info-btn-row {
   display: flex;

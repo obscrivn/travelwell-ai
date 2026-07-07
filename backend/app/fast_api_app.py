@@ -188,8 +188,36 @@ def parse_markdown_to_recommendations(markdown: str, budget_sel: str = "20", has
         parsed_maps_url = ''
         parsed_hours = ''
         
+        amenity_states = {
+            "pool": "unknown",
+            "showers": "unknown",
+            "treadmill": "unknown",
+            "lockers": "unknown",
+            "parking": "unknown"
+        }
+        amenity_sources = {
+            "pool": "unknown",
+            "showers": "unknown",
+            "treadmill": "unknown",
+            "lockers": "unknown",
+            "parking": "unknown"
+        }
+        
         for line in lines:
             lower = line.lower()
+            
+            # Direct parsing of three-state emojis
+            for key_am in ["pool", "showers", "treadmill", "lockers", "parking"]:
+                if key_am in lower or (key_am == "treadmill" and "cardio" in lower):
+                    if "✅" in lower:
+                        amenity_states[key_am] = "verified"
+                        amenity_sources[key_am] = "official_website"
+                    elif "❌" in lower:
+                        amenity_states[key_am] = "unavailable"
+                        amenity_sources[key_am] = "official_website"
+                    elif "❓" in lower:
+                        amenity_states[key_am] = "unknown"
+                        amenity_sources[key_am] = "unknown"
             if '- distance' in lower or '- travel time' in lower:
                 parts = line.split(':', 1)
                 distance_str = parts[1].strip() if len(parts) > 1 else ''
@@ -376,6 +404,14 @@ def parse_markdown_to_recommendations(markdown: str, budget_sel: str = "20", has
                 res = fetch_facility_details(enrich_id, has_ymca=has_ymca, memberships=memberships)
                 if res.get("status") == "success":
                     meta = res["details"].get("source_metadata", {})
+                    if meta.get("amenity_states"):
+                        for k, v in meta["amenity_states"].items():
+                            if v != "unknown" or amenity_states[k] == "unknown":
+                                amenity_states[k] = v
+                    if meta.get("amenity_sources"):
+                        for k, v in meta["amenity_sources"].items():
+                            if v != "unknown" or amenity_sources[k] == "unknown":
+                                amenity_sources[k] = v
                     if meta.get("formatted_address") and meta["formatted_address"] != "Address unavailable":
                         if not parsed_address or parsed_address == "Address unavailable":
                             parsed_address = meta["formatted_address"]
@@ -494,6 +530,32 @@ def parse_markdown_to_recommendations(markdown: str, budget_sel: str = "20", has
                 if clean_eligibility == "Fits Your Criteria":
                     clean_eligibility = "Alternative"
 
+        # Override any rejections due to unknown/unverified amenities
+        if clean_eligibility == "Rejected":
+            is_budget_ok = True
+            if budget_sel == "free" and effective_price != 0.0:
+                is_budget_ok = False
+            elif budget_sel != "none" and budget_sel != "free" and effective_price is not None:
+                try:
+                    if effective_price > float(budget_sel):
+                        is_budget_ok = False
+                except ValueError:
+                    pass
+            
+            is_membership_ok = True
+            if is_private_club and not has_matching_membership and access_status not in ["verified_day_pass", "free_public_access"]:
+                is_membership_ok = False
+                
+            if is_budget_ok and is_membership_ok:
+                clean_eligibility = "Alternative"
+
+        # Reduce confidence and log warnings for unknown amenities
+        confidence_multiplier = 1.0
+        for am_key, am_state in amenity_states.items():
+            if am_state == "unknown":
+                confidence_multiplier *= 0.9
+                data_warnings.append(f"Unverified amenity: {am_key}")
+
         # Build card_summary consistently with normalized values
         card_summary = f"✓ Free" if effective_price == 0.0 else f"✓ ${effective_price}" if effective_price is not None else "✓ Price unknown"
         if walk_minutes_val is not None:
@@ -513,6 +575,9 @@ def parse_markdown_to_recommendations(markdown: str, budget_sel: str = "20", has
         facility["distance"]["transit_time_minutes"] = drive_minutes_val
         facility["distance"]["description"] = distance_str or (f"{walk_minutes_val} min walk" if walk_minutes_val is not None else "Travel unavailable")
         facility["emoji_badges"] = ["🏊 Pool", "🏃 Treadmill", "🚿 Showers", "🔒 Lockers"] if is_mccormick or "ymca" in norm_name.lower() else ["🏃 Treadmill", "🚿 Showers", "🔒 Lockers"]
+
+        base_confidence = 1.0 if clean_eligibility == "Fits Your Criteria" else 0.7 if clean_eligibility == "Alternative" else 0.3
+        final_confidence = round(max(0.1, base_confidence * confidence_multiplier), 2)
 
         recommendation_entry = {
             "id": facility_id,
@@ -534,12 +599,14 @@ def parse_markdown_to_recommendations(markdown: str, budget_sel: str = "20", has
             "is_open_now": False if "closed" in resolved_hours_summary.lower() else True,
             "opening_hours_summary": resolved_hours_summary,
             "amenities": [],
+            "amenity_states": amenity_states,
+            "amenity_sources": amenity_sources,
             "website": parsed_website or parsed_maps_url or "Unknown Website",
             "google_maps_url": parsed_maps_url or "https://maps.google.com",
             "official_website_url": parsed_website or "Unknown Website",
             "validation_status": "passed" if clean_eligibility == "Fits Your Criteria" else "warning" if clean_eligibility == "Alternative" else "failed",
             "eligibility_status": clean_eligibility,
-            "confidence": 1.0 if clean_eligibility == "Fits Your Criteria" else 0.7 if clean_eligibility == "Alternative" else 0.3,
+            "confidence": final_confidence,
             "explanation": rationale or "Meets constraint criteria.",
             "data_warnings": data_warnings,
             
